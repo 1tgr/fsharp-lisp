@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Core", "Core\Core.fsproj", "{51C5CE1D-E45F-44C1-A0DC-6432C0263969}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Compiler", "Compiler\Compiler.fsproj", "{BEFD4806-80E8-46E8-A905-86A03365FA92}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{51C5CE1D-E45F-44C1-A0DC-6432C0263969}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{51C5CE1D-E45F-44C1-A0DC-6432C0263969}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{51C5CE1D-E45F-44C1-A0DC-6432C0263969}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{51C5CE1D-E45F-44C1-A0DC-6432C0263969}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BEFD4806-80E8-46E8-A905-86A03365FA92}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BEFD4806-80E8-46E8-A905-86A03365FA92}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BEFD4806-80E8-46E8-A905-86A03365FA92}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BEFD4806-80E8-46E8-A905-86A03365FA92}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
