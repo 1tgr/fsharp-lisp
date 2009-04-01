@@ -6,6 +6,14 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Compiler", "Compiler\Compiler.fsproj", "{BEFD4806-80E8-46E8-A905-86A03365FA92}"
 EndProject
 Global
+	GlobalSection(SourceCodeControl) = preSolution
+		SccNumberOfProjects = 3
+		SccLocalPath0 = .
+		SccProjectUniqueName1 = Core\\Core.fsproj
+		SccLocalPath1 = Core
+		SccProjectUniqueName2 = Compiler\\Compiler.fsproj
+		SccLocalPath2 = Compiler
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
