@@ -1,10 +1,15 @@
 ﻿#light
 namespace Tim.Lisp.Core
+open System.Reflection.Emit
 
 type LispVal = Atom of string
+             | Bool of bool
+             | CompiledLambda of MethodBuilder
+             | CompiledVariable of LocalBuilder
+             | LambdaPrimitive of string list * LispVal
              | List of LispVal list
+             | ListPrimitive of ListOp * LispVal list
              | Number of int
              | String of string
-             | Bool of bool
              | UnaryPrimitive of UnaryOp * LispVal
-             | ListPrimitive of ListOp * LispVal list
+             | VariablePrimitive of string * LispVal

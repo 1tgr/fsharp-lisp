@@ -11,20 +11,22 @@ module Program =
         try
             let code = 
                 [
-                    List [ Atom "-"; List [ Atom "+"; Number 4; Number 5; Number 6 ]; Number 2; Number 3 ];
-                    List [ Atom "+"; List [ Atom "eval"; List [ Atom "quote"; String "42"; ] ]; Number 1 ]
+                    List [ Atom "vr"; Atom "answer"; List [ Atom "lambda"; List [ ]; Number 42; ] ];
+                    List [ Atom "+"; List [ Atom "answer" ]; List [ Atom "answer" ]; List [ Atom "answer" ] ]
+                    //List [ Atom "-"; List [ Atom "+"; Number 4; Number 5; Number 6 ]; Number 2; Number 3 ];
+                    //List [ Atom "+"; List [ Atom "eval"; List [ Atom "quote"; String "42"; ] ]; Number 1 ]
                 ]
 
             let assemblyName = AssemblyName "output"
             let a = AppDomain.CurrentDomain.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Save)
             let m = a.DefineDynamicModule (assemblyName.Name + ".exe")
-            let t = m.DefineType("Program", TypeAttributes.Sealed ||| TypeAttributes.Public)
-            let meth = t.DefineMethod("Main", MethodAttributes.Static ||| MethodAttributes.Public, typeof<Void>, [| |])
+            let typeBuilder = m.DefineType("Program", TypeAttributes.Sealed ||| TypeAttributes.Public)
+            let meth = typeBuilder.DefineMethod("Main", MethodAttributes.Static ||| MethodAttributes.Public, typeof<Void>, [| |])
             let generator = meth.GetILGenerator()
 
             let compile emptyEnv x =
                 let withPrimitives = x |> Evaluator.insertPrimitives
-                let env = withPrimitives |> Compiler.compile generator emptyEnv
+                let env = withPrimitives |> Compiler.compile generator typeBuilder emptyEnv
                 match Compiler.typeOf env withPrimitives with
                 | t when t.IsValueType -> generator.Emit(OpCodes.Box, t)
                 | _ -> ()
@@ -33,7 +35,7 @@ module Program =
 
             List.fold_left compile Map.empty code |> ignore
             generator.Emit OpCodes.Ret
-            t.CreateType() |> ignore
+            typeBuilder.CreateType() |> ignore
             a.SetEntryPoint(meth)
             a.Save (assemblyName.Name + ".exe")
             0
