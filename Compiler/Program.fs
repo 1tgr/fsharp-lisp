@@ -22,14 +22,14 @@ module Program =
             let meth = t.DefineMethod("Main", MethodAttributes.Static ||| MethodAttributes.Public, typeof<Void>, [| |])
             let generator = meth.GetILGenerator()
 
-            let compile env x =
-                let env' = Compiler.compile1 env x
-                Compiler.compile2 env' generator x
-                match Compiler.typeOf env' x with
-                    | t when t.IsValueType -> generator.Emit(OpCodes.Box, t)
-                    | _ -> ()
+            let compile emptyEnv x =
+                let withPrimitives = x |> Evaluator.insertPrimitives
+                let env = withPrimitives |> Compiler.compile generator emptyEnv
+                match Compiler.typeOf env withPrimitives with
+                | t when t.IsValueType -> generator.Emit(OpCodes.Box, t)
+                | _ -> ()
                 generator.Emit(OpCodes.Call, typeof<Console>.GetMethod("WriteLine", [| typeof<obj> |]))
-                env'
+                env
 
             List.fold_left compile Map.empty code |> ignore
             generator.Emit OpCodes.Ret

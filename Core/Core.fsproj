@@ -41,6 +41,8 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ListOp.fs" />
+    <Compile Include="UnaryOp.fs" />
     <Compile Include="LispVal.fs" />
     <Compile Include="Quote.fs" />
     <Compile Include="Evaluator.fs" />
