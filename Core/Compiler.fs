@@ -72,6 +72,16 @@ module Compiler =
                     generator.Emit(OpCodes.Call, typeof<Quote>.GetMethod("Bool"))
                 | l -> failwith ("cannot quote list " + any_to_string l)
 
+            let compileIf opCode env thenValue elseValue =
+                let thenLabel = generator.DefineLabel()
+                let endLabel = generator.DefineLabel()
+                generator.Emit(opCode, thenLabel)
+                elseValue |> compile' env |> ignore
+                generator.Emit(OpCodes.Br, endLabel)
+                generator.MarkLabel thenLabel
+                thenValue |> compile' env |> ignore
+                generator.MarkLabel endLabel
+
             function
             | ArgRef index -> 
                 generator.Emit(OpCodes.Ldarg, index)
@@ -80,16 +90,14 @@ module Compiler =
             | Bool b -> 
                 generator.Emit (if b then OpCodes.Ldc_I4_1 else OpCodes.Ldc_I4_0)
                 env
+            | IfPrimitive (ListPrimitive (Equal, [ a; b ]), thenValue, elseValue) ->
+                let env' = a |> compile' env
+                let env'' = b |> compile' env'
+                compileIf OpCodes.Beq env'' thenValue elseValue
+                env''
             | IfPrimitive (testValue, thenValue, elseValue) ->
                 let env' = testValue |> compile' env
-                let elseLabel = generator.DefineLabel()
-                let endLabel = generator.DefineLabel()
-                generator.Emit(OpCodes.Brfalse, elseLabel)
-                thenValue |> compile' env' |> ignore
-                generator.Emit(OpCodes.Br, endLabel)
-                generator.MarkLabel elseLabel
-                elseValue |> compile' env' |> ignore
-                generator.MarkLabel endLabel
+                compileIf OpCodes.Brtrue env' thenValue elseValue
                 env'
             | LambdaDef _ -> failwith "didn't expect lambda outside variable"
             | LambdaRef _ -> failwith "cannot compile lambda"
@@ -119,6 +127,7 @@ module Compiler =
                 match value with
                 | LambdaDef (names, body) ->
                     let methodBuilder = declaringType.DefineMethod(name, MethodAttributes.Static ||| MethodAttributes.Private, typeOf env body, (Array.create (List.length names) (typeof<int>)))
+                    names |> List.iteri (fun position name -> methodBuilder.DefineParameter(position, ParameterAttributes.None, name) |> ignore)
                     let env' = Map.add name (LambdaRef methodBuilder) env
                     let lambdaGenerator = methodBuilder.GetILGenerator()
                     let (lambdaEnv, _) = names |> List.fold_left (fun (env, index) name -> (Map.add name (ArgRef index) env, index + 1)) (env', 0)
