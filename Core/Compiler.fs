@@ -7,10 +7,15 @@ open System.Reflection.Emit
 
 module Compiler =
     let rec typeOf (env : Map<string, LispVal>) = function
+        | ArgReference _ -> typeof<int>
         | Atom a -> env.[a] |> typeOf env
         | Bool _ -> typeof<bool>
         | CompiledLambda methodBuilder -> methodBuilder.ReturnType
         | CompiledVariable local -> local.LocalType
+        | IfPrimitive (_, thenValue, elseValue) ->
+            match typeOf env thenValue with
+            | t when t = typeOf env elseValue -> t
+            | _ -> failwith "expected 'then' and 'else' branches to have same type"
         | LambdaPrimitive (_, body) -> typeOf env body
         | List (Atom a :: _) -> env.[a] |> typeOf env
         | List (fn :: args) -> failwith ("can't invoke " + any_to_string fn)
@@ -24,10 +29,12 @@ module Compiler =
 
     let rec compile (generator : ILGenerator) (declaringType : TypeBuilder) initialEnv x =
         let rec compile1 (env : Map<string, LispVal>) = function
+            | ArgReference _ -> env
             | Atom a -> env.[a] |> compile1 env
             | Bool _ -> env
             | CompiledLambda _ -> env
             | CompiledVariable _ -> env
+            | IfPrimitive (testValue, _, _) -> testValue |> compile1 env
             | LambdaPrimitive (_, body) -> failwith "didn't expect lambda outside variable"
             | ListPrimitive _ -> env
             | UnaryPrimitive (Eval, _) -> env
@@ -37,12 +44,14 @@ module Compiler =
             | List [ ] -> failwith ("can't compile empty list")
             | Number _ -> env
             | String _ -> env
-            | VariablePrimitive (name, LambdaPrimitive (_, body)) ->
-                let methodBuilder = declaringType.DefineMethod(name, MethodAttributes.Static ||| MethodAttributes.Private, typeOf env body, [| |])
-                body |> compile1 env |> Map.add name (CompiledLambda methodBuilder)
+            | VariablePrimitive (name, LambdaPrimitive (names, body)) ->
+                let methodBuilder = declaringType.DefineMethod(name, MethodAttributes.Static ||| MethodAttributes.Private, typeOf env body, (Array.create (List.length names) (typeof<int>)))
+                let env' = Map.add name (CompiledLambda methodBuilder) env
+                compile1 env' body
             | VariablePrimitive (name, value) ->
                 let local = generator.DeclareLocal(typeOf env value)
-                value |> compile1 env |> Map.add name (CompiledVariable local)
+                let env' = Map.add name (CompiledVariable local) env
+                compile1 env' value
 
         let env = x |> compile1 initialEnv
 
@@ -62,6 +71,7 @@ module Compiler =
                         | Subtract -> OpCodes.Sub
                         | Multiply -> OpCodes.Mul
                         | Divide -> OpCodes.Div
+                        | Equal -> OpCodes.Ceq
 
                     let compile2' x =
                         coerce x
@@ -91,15 +101,28 @@ module Compiler =
                 | l -> failwith ("cannot quote list " + any_to_string l)
 
             function
+            | ArgReference index -> generator.Emit(OpCodes.Ldarg, index)
             | Atom a -> env.[a] |> compile2
             | Bool true -> generator.Emit(OpCodes.Ldc_I4_1)
             | Bool false -> generator.Emit(OpCodes.Ldc_I4_0)
             | CompiledLambda _ -> failwith "didn't expect lambda outside variable"
             | CompiledVariable local -> generator.Emit(OpCodes.Ldloc, local)
+            | IfPrimitive (testValue, thenValue, elseValue) ->
+                testValue |> compile2
+                let elseLabel = generator.DefineLabel()
+                let endLabel = generator.DefineLabel()
+                generator.Emit(OpCodes.Brfalse, elseLabel)
+                thenValue |> compile2
+                generator.Emit(OpCodes.Br, endLabel)
+                generator.MarkLabel elseLabel
+                elseValue |> compile2
+                generator.MarkLabel endLabel
             | LambdaPrimitive _ -> failwith "cannot compile lambda"
             | List (Atom a :: args) ->
                 match env.[a] with
-                | CompiledLambda methodBuilder -> generator.Emit(OpCodes.Call, methodBuilder)
+                | CompiledLambda methodBuilder -> 
+                    args |> List.iter compile2
+                    generator.Emit(OpCodes.Call, methodBuilder)
                 | v -> failwith ("can't invoke " + any_to_string v)
             | List (fn :: args) -> failwith ("can't invoke " + any_to_string fn)
             | List [ ] -> failwith ("can't compile empty list")
@@ -112,16 +135,17 @@ module Compiler =
                 match env.[name] with
                 | CompiledLambda methodBuilder ->
                     match value with
-                    | LambdaPrimitive (_, body) ->
+                    | LambdaPrimitive (names, body) ->
                         let generator' = methodBuilder.GetILGenerator()
-                        compile generator' declaringType env body |> ignore
+                        let (lambdaEnv, _) = names |> List.fold_left (fun (env, index) name -> (Map.add name (ArgReference index) env, index + 1)) (env, 0)
+                        body |> compile generator' declaringType lambdaEnv |> ignore
                         generator'.Emit(OpCodes.Ret)
-                        generator.Emit(OpCodes.Call, methodBuilder)
+                        generator.Emit(OpCodes.Ldc_I4, -1)
                     | v -> failwith ("expected lambda variable, got " + any_to_string v)
                 | CompiledVariable local ->
                     compile2 value
                     generator.Emit(OpCodes.Stloc, local)
-                    generator.Emit(OpCodes.Ldloc, local)
+                    generator.Emit(OpCodes.Ldc_I4, -1)
                 | v -> failwith ("didn't expect " + any_to_string v)
 
         compile2 x

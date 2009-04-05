@@ -5,3 +5,4 @@ type ListOp = Add
             | Subtract
             | Multiply
             | Divide
+            | Equal

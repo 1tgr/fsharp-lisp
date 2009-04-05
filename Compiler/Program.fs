@@ -7,14 +7,44 @@ open System.Reflection.Emit
 open Tim.Lisp.Core
 
 module Program =
-    let main =
+    [<EntryPoint>]
+    let main (_ : string array) =
         try
             let code = 
                 [
-                    List [ Atom "vr"; Atom "answer"; List [ Atom "lambda"; List [ ]; Number 42; ] ];
-                    List [ Atom "+"; List [ Atom "answer" ]; List [ Atom "answer" ]; List [ Atom "answer" ] ]
-                    //List [ Atom "-"; List [ Atom "+"; Number 4; Number 5; Number 6 ]; Number 2; Number 3 ];
-                    //List [ Atom "+"; List [ Atom "eval"; List [ Atom "quote"; String "42"; ] ]; Number 1 ]
+                    List [
+                        Atom "define"; 
+                        Atom "fact"; 
+                        List [ 
+                            Atom "lambda"; 
+                            List [ Atom "n" ]; 
+                            List [ 
+                                Atom "if"; 
+                                List [
+                                    Atom "=";
+                                    Atom "n";
+                                    Number 0
+                                ];
+                                Number 1;
+                                List [
+                                    Atom "*";
+                                    Atom "n";
+                                    List [
+                                        Atom "fact";
+                                        List [
+                                            Atom "-";
+                                            Atom "n";
+                                            Number 1
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ];
+                    List [
+                        Atom "fact";
+                        Number 6
+                    ]
                 ]
 
             let assemblyName = AssemblyName "output"
