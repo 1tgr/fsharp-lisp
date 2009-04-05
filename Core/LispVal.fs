@@ -3,16 +3,16 @@ namespace Tim.Lisp.Core
 open System.Reflection.Emit
 
 type LispVal = 
-             | ArgReference of int
+             | ArgRef of int
              | Atom of string
              | Bool of bool
-             | CompiledLambda of MethodBuilder
-             | CompiledVariable of LocalBuilder
              | IfPrimitive of LispVal * LispVal * LispVal
-             | LambdaPrimitive of string list * LispVal
+             | LambdaDef of string list * LispVal
+             | LambdaRef of MethodBuilder
              | List of LispVal list
              | ListPrimitive of ListOp * LispVal list
              | Number of int
              | String of string
              | UnaryPrimitive of UnaryOp * LispVal
-             | VariablePrimitive of string * LispVal
+             | VariableDef of string * LispVal
+             | VariableRef of LocalBuilder

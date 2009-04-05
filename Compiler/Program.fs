@@ -58,9 +58,10 @@ module Program =
                 let withPrimitives = x |> Evaluator.insertPrimitives
                 let env = withPrimitives |> Compiler.compile generator typeBuilder emptyEnv
                 match Compiler.typeOf env withPrimitives with
-                | t when t.IsValueType -> generator.Emit(OpCodes.Box, t)
-                | _ -> ()
-                generator.Emit(OpCodes.Call, typeof<Console>.GetMethod("WriteLine", [| typeof<obj> |]))
+                | t when t = typeof<Void> -> ()
+                | t ->
+                    if t.IsValueType then generator.Emit(OpCodes.Box, t) else ()
+                    generator.Emit(OpCodes.Call, typeof<Console>.GetMethod("WriteLine", [| typeof<obj> |]))
                 env
 
             List.fold_left compile Map.empty code |> ignore

@@ -15,7 +15,7 @@ module Evaluator =
         | List (Atom "=" :: args) -> ListPrimitive (Equal, args |> List.map insertPrimitives)
         | List (Atom "define" :: args) ->
             match args with
-            | [ Atom name; v ] -> VariablePrimitive (name, insertPrimitives v)
+            | [ Atom name; v ] -> VariableDef (name, insertPrimitives v)
             | _ -> failwith "expected vr name value"
 
         | List (Atom "eval" :: args) -> 
@@ -35,7 +35,7 @@ module Evaluator =
 
         | List (Atom "lambda" :: args) ->
             match args with
-            | [ List names; body ] -> LambdaPrimitive (names |> List.map extractAtom, insertPrimitives body)
+            | [ List names; body ] -> LambdaDef (names |> List.map extractAtom, insertPrimitives body)
             | _ -> failwith "expected lambda names body"
 
         | List l -> l |> List.map insertPrimitives |> List
@@ -56,21 +56,21 @@ module Evaluator =
             (env, args |> List.map (eval env >> snd) |> List.reduce_left (boxUnbox fn))
 
         function
-        | ArgReference _ -> failwith "cannot evaluate arg reference"
+        | ArgRef _ -> failwith "cannot evaluate arg reference"
         | Atom a -> (env, env.[a] |> eval env |> snd)
         | Bool b as v -> (env, box b)
-        | CompiledLambda _ -> failwith "didn't expect CompiledLambda"
-        | CompiledVariable _ -> failwith "didn't expect CompiledVariable"
         | IfPrimitive (testValue, thenValue, elseValue) -> 
             match eval env testValue with
             | (env', (:? bool as value)) -> 
                 eval env' (if value then thenValue else elseValue)
             | _ -> failwith "expected bool expression"
-        | LambdaPrimitive (names, code) -> failwith "cannot evaluate lambda"
+        | LambdaDef (names, code) -> failwith "cannot evaluate lambda"
+        | LambdaRef _ -> failwith "didn't expect CompiledLambda"
         | List l -> failwith ("cannot evaluate list " + any_to_string l)
         | ListPrimitive (op, args) -> evalBinary op args
         | Number n as v -> (env, box n)
         | String s as v -> (env, box s)
         | UnaryPrimitive (Eval, arg) -> (env, arg |> insertPrimitives |> eval env |> snd)
         | UnaryPrimitive (Quote, arg) -> (env, box arg)
-        | VariablePrimitive (name, value) -> (Map.add name value env, box value)
+        | VariableDef(name, value) -> (Map.add name value env, box value)
+        | VariableRef _ -> failwith "didn't expect CompiledVariable"
