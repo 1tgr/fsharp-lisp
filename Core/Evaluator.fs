@@ -16,7 +16,8 @@ module Evaluator =
         | List (Atom "define" :: args) ->
             match args with
             | [ Atom name; v ] -> VariableDef (name, insertPrimitives v)
-            | _ -> failwith "expected vr name value"
+            | [ List (Atom name :: names); body ] -> VariableDef (name, LambdaDef (names |> List.map extractAtom, insertPrimitives body))
+            | _ -> failwith "expected define name value"
 
         | List (Atom "eval" :: args) -> 
             match args with

@@ -14,28 +14,27 @@ module Program =
                 [
                     List [
                         Atom "define"; 
-                        Atom "fact"; 
+                        List [
+                            Atom "fact"; 
+                            Atom "n"
+                        ];
                         List [ 
-                            Atom "lambda"; 
-                            List [ Atom "n" ]; 
-                            List [ 
-                                Atom "if"; 
+                            Atom "if"; 
+                            List [
+                                Atom "=";
+                                Atom "n";
+                                Number 0
+                            ];
+                            Number 1;
+                            List [
+                                Atom "*";
+                                Atom "n";
                                 List [
-                                    Atom "=";
-                                    Atom "n";
-                                    Number 0
-                                ];
-                                Number 1;
-                                List [
-                                    Atom "*";
-                                    Atom "n";
+                                    Atom "fact";
                                     List [
-                                        Atom "fact";
-                                        List [
-                                            Atom "-";
-                                            Atom "n";
-                                            Number 1
-                                        ]
+                                        Atom "-";
+                                        Atom "n";
+                                        Number 1
                                     ]
                                 ]
                             ]
