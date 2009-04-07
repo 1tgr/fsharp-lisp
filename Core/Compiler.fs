@@ -127,7 +127,7 @@ module Compiler =
                 match value with
                 | LambdaDef (names, body) ->
                     let methodBuilder = declaringType.DefineMethod(name, MethodAttributes.Static ||| MethodAttributes.Private, typeOf env body, (Array.create (List.length names) (typeof<int>)))
-                    names |> List.iteri (fun position name -> methodBuilder.DefineParameter(position, ParameterAttributes.None, name) |> ignore)
+                    names |> List.iteri (fun position name -> methodBuilder.DefineParameter(position + 1, ParameterAttributes.None, name) |> ignore)
                     let env' = Map.add name (LambdaRef methodBuilder) env
                     let lambdaGenerator = methodBuilder.GetILGenerator()
                     let (lambdaEnv, _) = names |> List.fold_left (fun (env, index) name -> (Map.add name (ArgRef index) env, index + 1)) (env', 0)
