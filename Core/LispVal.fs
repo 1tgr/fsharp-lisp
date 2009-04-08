@@ -1,5 +1,6 @@
 ﻿#light
 namespace Tim.Lisp.Core
+open System.Reflection
 open System.Reflection.Emit
 
 type LispVal = 
@@ -8,7 +9,7 @@ type LispVal =
              | Bool of bool
              | IfPrimitive of LispVal * LispVal * LispVal
              | LambdaDef of string list * LispVal
-             | LambdaRef of MethodBuilder
+             | LambdaRef of MethodInfo
              | List of LispVal list
              | ListPrimitive of ListOp * LispVal list
              | Number of int

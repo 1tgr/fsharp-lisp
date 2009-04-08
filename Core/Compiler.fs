@@ -82,6 +82,42 @@ module Compiler =
                 thenValue |> compile' env |> ignore
                 generator.MarkLabel endLabel
 
+            let compileBoxed (expectedType : Type) env x =
+                let env' = compile' env x
+                match typeOf env x with
+                | a when not expectedType.IsValueType && a.IsValueType -> generator.Emit(OpCodes.Box, a)
+                | _ -> ()
+                env'
+
+            let rec makeArgs = function
+                | ((param : ParameterInfo) :: ps) ->
+                    fun env ->
+                        function 
+                        | [ ] -> failwith ("provided " + string (1 + List.length ps) + " too few args")
+                        | (arg :: rest) as args ->
+                            let parameterType = param.ParameterType
+                            if parameterType.IsArray && param.IsDefined(typeof<ParamArrayAttribute>, true)
+                            then
+                                let elementType = parameterType.GetElementType()
+                                let storeElement (env, position) x =
+                                    generator.Emit(OpCodes.Dup)
+                                    generator.Emit(OpCodes.Ldc_I4, int position)
+                                    let env' = compileBoxed elementType env x
+                                    generator.Emit(OpCodes.Stelem, elementType)
+                                    (env', position + 1)
+
+                                generator.Emit(OpCodes.Ldc_I4, List.length args)
+                                generator.Emit(OpCodes.Newarr, elementType)
+                                args |> List.fold_left storeElement (env, 0) |> fst
+                            else
+                                let env' = compileBoxed parameterType env arg
+                                makeArgs ps env' rest
+                | [ ] -> 
+                    fun env -> 
+                        function
+                        | [ ] -> env
+                        | args -> failwith ("provided " + string (List.length args) + " too many args")
+
             function
             | ArgRef index -> 
                 generator.Emit(OpCodes.Ldarg, index)
@@ -103,9 +139,10 @@ module Compiler =
             | LambdaRef _ -> failwith "cannot compile lambda"
             | List (Atom a :: args) ->
                 match env.[a] with
-                | LambdaRef methodBuilder -> 
-                    let env' = args |> List.fold_left compile' env
-                    generator.Emit(OpCodes.Call, methodBuilder)
+                | LambdaRef methodInfo -> 
+                    let parameters = List.of_array (methodInfo.GetParameters())
+                    let env' = args |> makeArgs parameters env
+                    generator.Emit(OpCodes.Call, methodInfo)
                     env'
                 | v -> failwith ("can't invoke " + any_to_string v)
             | List (fn :: args) -> failwith ("can't invoke " + any_to_string fn)

@@ -12,7 +12,7 @@ module Program =
         try
             let code = 
                 [
-                    List [
+                    (*List [
                         Atom "define"; 
                         List [
                             Atom "fact"; 
@@ -41,8 +41,21 @@ module Program =
                         ]
                     ];
                     List [
-                        Atom "fact";
-                        Number 6
+                        Atom "WriteLine";
+                        List [
+                            Atom "fact";
+                            Number 6
+                        ]
+                    ];*)
+                    List [
+                        Atom "WriteLine";
+                        String "What is your name?";
+                        String ""
+                    ];
+                    List [
+                        Atom "WriteLine";
+                        String "Hello, {0}";
+                        List [ Atom "ReadLine" ]
                     ]
                 ]
 
@@ -53,17 +66,10 @@ module Program =
             let meth = typeBuilder.DefineMethod("Main", MethodAttributes.Static ||| MethodAttributes.Public, typeof<Void>, [| |])
             let generator = meth.GetILGenerator()
 
-            let compile emptyEnv x =
-                let withPrimitives = x |> Evaluator.insertPrimitives
-                let env = withPrimitives |> Compiler.compile generator typeBuilder emptyEnv
-                match Compiler.typeOf env withPrimitives with
-                | t when t = typeof<Void> -> ()
-                | t ->
-                    if t.IsValueType then generator.Emit(OpCodes.Box, t) else ()
-                    generator.Emit(OpCodes.Call, typeof<Console>.GetMethod("WriteLine", [| typeof<obj> |]))
-                env
+            let compile env = Evaluator.insertPrimitives >> Compiler.compile generator typeBuilder env
+            let initialEnv = typeof<Console>.GetMethods() |> Array.fold_left (fun env m -> Map.add m.Name (LambdaRef m) env) Map.empty
 
-            List.fold_left compile Map.empty code |> ignore
+            List.fold_left compile initialEnv code |> ignore
             generator.Emit OpCodes.Ret
             typeBuilder.CreateType() |> ignore
             a.SetEntryPoint(meth)
