@@ -12,7 +12,7 @@ module Program =
         try
             let code = 
                 [
-                    (*List [
+                    List [
                         Atom "define"; 
                         List [
                             Atom "fact"; 
@@ -42,11 +42,12 @@ module Program =
                     ];
                     List [
                         Atom "WriteLine";
+                        String "6! = {0}";
                         List [
                             Atom "fact";
                             Number 6
                         ]
-                    ];*)
+                    ];
                     List [
                         Atom "WriteLine";
                         String "What is your name?";
@@ -67,7 +68,16 @@ module Program =
             let generator = meth.GetILGenerator()
 
             let compile env = Evaluator.insertPrimitives >> Compiler.compile generator typeBuilder env
-            let initialEnv = typeof<Console>.GetMethods() |> Array.fold_left (fun env m -> Map.add m.Name (LambdaRef m) env) Map.empty
+            let isParamArray (parameterInfo : #ParameterInfo) = parameterInfo.IsDefined(typeof<ParamArrayAttribute>, true)
+            let makeLambdaRef (methodInfo : #MethodInfo) =
+                let parameters = methodInfo.GetParameters()
+                let parameterTypes = parameters |> List.of_array |> List.map (function
+                    | p when p.ParameterType.IsArray && isParamArray p -> p.ParameterType.GetElementType()
+                    | p -> p.ParameterType)
+                let isParamArray = parameters.Length > 0 && isParamArray parameters.[parameters.Length - 1]
+                LambdaRef (methodInfo, isParamArray, parameterTypes)
+
+            let initialEnv = typeof<Console>.GetMethods() |> Array.fold_left (fun env m -> Map.add m.Name (makeLambdaRef m) env) Map.empty
 
             List.fold_left compile initialEnv code |> ignore
             generator.Emit OpCodes.Ret

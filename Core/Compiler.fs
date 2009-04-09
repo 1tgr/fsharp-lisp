@@ -15,7 +15,7 @@ module Compiler =
             | t when t = typeOf env elseValue -> t
             | _ -> failwith "expected 'then' and 'else' branches to have same type"
         | LambdaDef (_, body) -> typeOf env body
-        | LambdaRef methodBuilder -> methodBuilder.ReturnType
+        | LambdaRef (methodBuilder, _, _) -> methodBuilder.ReturnType
         | List (Atom a :: _) -> env.[a] |> typeOf env
         | List (fn :: args) -> failwith ("can't invoke " + any_to_string fn)
         | List [ ] -> failwith ("can't compile empty list")
@@ -82,36 +82,41 @@ module Compiler =
                 thenValue |> compile' env |> ignore
                 generator.MarkLabel endLabel
 
-            let compileBoxed (expectedType : Type) env x =
+            let compileBoxed (expectedType : #Type) env x =
                 let env' = compile' env x
                 match typeOf env x with
                 | a when not expectedType.IsValueType && a.IsValueType -> generator.Emit(OpCodes.Box, a)
                 | _ -> ()
                 env'
 
-            let rec makeArgs = function
-                | ((param : ParameterInfo) :: ps) ->
+            let rec makeArgs isParamArray = function
+                | [ parameterType ] ->
                     fun env ->
                         function 
-                        | [ ] -> failwith ("provided " + string (1 + List.length ps) + " too few args")
-                        | (arg :: rest) as args ->
-                            let parameterType = param.ParameterType
-                            if parameterType.IsArray && param.IsDefined(typeof<ParamArrayAttribute>, true)
+                        | [ ] -> failwith ("provided 1 too few args")
+                        | (arg :: resta) as args ->
+                            if isParamArray
                             then
-                                let elementType = parameterType.GetElementType()
                                 let storeElement (env, position) x =
                                     generator.Emit(OpCodes.Dup)
                                     generator.Emit(OpCodes.Ldc_I4, int position)
-                                    let env' = compileBoxed elementType env x
-                                    generator.Emit(OpCodes.Stelem, elementType)
+                                    let env' = compileBoxed parameterType env x
+                                    generator.Emit(OpCodes.Stelem, (parameterType :> Type))
                                     (env', position + 1)
 
                                 generator.Emit(OpCodes.Ldc_I4, List.length args)
-                                generator.Emit(OpCodes.Newarr, elementType)
+                                generator.Emit(OpCodes.Newarr, (parameterType :> Type))
                                 args |> List.fold_left storeElement (env, 0) |> fst
                             else
                                 let env' = compileBoxed parameterType env arg
-                                makeArgs ps env' rest
+                                makeArgs false [ ] env' resta
+                | (parameterType :: restp) as parameterTypes ->
+                    fun env ->
+                        function 
+                        | [ ] -> failwith ("provided " + string (List.length parameterTypes) + " too few args")
+                        | (arg :: resta) as args ->
+                            let env' = compileBoxed parameterType env arg
+                            makeArgs isParamArray restp env' resta
                 | [ ] -> 
                     fun env -> 
                         function
@@ -139,9 +144,8 @@ module Compiler =
             | LambdaRef _ -> failwith "cannot compile lambda"
             | List (Atom a :: args) ->
                 match env.[a] with
-                | LambdaRef methodInfo -> 
-                    let parameters = List.of_array (methodInfo.GetParameters())
-                    let env' = args |> makeArgs parameters env
+                | LambdaRef (methodInfo, isParamArray, parameterTypes) -> 
+                    let env' = args |> makeArgs isParamArray parameterTypes env
                     generator.Emit(OpCodes.Call, methodInfo)
                     env'
                 | v -> failwith ("can't invoke " + any_to_string v)
@@ -165,7 +169,8 @@ module Compiler =
                 | LambdaDef (names, body) ->
                     let methodBuilder = declaringType.DefineMethod(name, MethodAttributes.Static ||| MethodAttributes.Private, typeOf env body, (Array.create (List.length names) (typeof<int>)))
                     names |> List.iteri (fun position name -> methodBuilder.DefineParameter(position + 1, ParameterAttributes.None, name) |> ignore)
-                    let env' = Map.add name (LambdaRef methodBuilder) env
+                    let lambdaRef = LambdaRef (methodBuilder, false, (List.map (fun _ -> typeof<int>) names))
+                    let env' = Map.add name lambdaRef env
                     let lambdaGenerator = methodBuilder.GetILGenerator()
                     let (lambdaEnv, _) = names |> List.fold_left (fun (env, index) name -> (Map.add name (ArgRef index) env, index + 1)) (env', 0)
                     body |> compile lambdaGenerator declaringType lambdaEnv |> ignore
