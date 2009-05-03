@@ -5,14 +5,19 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Core", "Core\Core.fsproj", 
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Compiler", "Compiler\Compiler.fsproj", "{BEFD4806-80E8-46E8-A905-86A03365FA92}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Interactive", "Interactive\Interactive.csproj", "{AF402994-A6BD-4CAB-9811-957CE3CF09D2}"
+EndProject
 Global
 	GlobalSection(SourceCodeControl) = preSolution
-		SccNumberOfProjects = 3
+		SccNumberOfProjects = 4
 		SccLocalPath0 = .
 		SccProjectUniqueName1 = Core\\Core.fsproj
 		SccLocalPath1 = Core
 		SccProjectUniqueName2 = Compiler\\Compiler.fsproj
 		SccLocalPath2 = Compiler
+		SccProjectUniqueName3 = Interactive\\Interactive.csproj
+		SccLocalPath3 = .
+		SccProjectFilePathRelativizedFromConnection3 = Interactive\\
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +32,10 @@ Global
 		{BEFD4806-80E8-46E8-A905-86A03365FA92}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BEFD4806-80E8-46E8-A905-86A03365FA92}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BEFD4806-80E8-46E8-A905-86A03365FA92}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF402994-A6BD-4CAB-9811-957CE3CF09D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF402994-A6BD-4CAB-9811-957CE3CF09D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF402994-A6BD-4CAB-9811-957CE3CF09D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF402994-A6BD-4CAB-9811-957CE3CF09D2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
