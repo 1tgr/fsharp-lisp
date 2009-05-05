@@ -1,0 +1,23 @@
+﻿%{
+open Tim.Lisp.Core
+%}
+
+%start parse
+%token <string> Identifier
+%token <string> Text
+%token <int> Digits
+%token Apostrophe LeftParen RightParen Eof
+%type <Tim.Lisp.Core.LispVal list> parse
+
+%%
+
+Expr: Identifier { Atom $1 }
+    | Text { String $1 }
+    | Digits { Number $1 }
+    | LeftParen ExprList RightParen { $2 |> List.rev |> List }
+    | Apostrophe Expr { List [ Atom "quote"; $2 ] }
+
+ExprList: Expr { [ $1 ] }
+        | ExprList Expr { $2 :: $1  }
+
+parse: ExprList Eof { List.rev $1 }

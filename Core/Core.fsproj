@@ -41,21 +41,33 @@
     <OutputPath>..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <FsYacc Include="FSYacc.fsy" />
+    <FsLex Include="FSLex.fsl" />
+    <Compile Include="ListOp.fs" />
+    <Compile Include="UnaryOp.fs" />
+    <Compile Include="LispVal.fs" />
+    <Compile Include="FSYacc.fsi" />
+    <Compile Include="FSYacc.fs" />
+    <Compile Include="FSLex.fs" />
+    <Compile Include="Parser.fs" />
+    <Compile Include="Quote.fs" />
+    <Compile Include="Evaluator.fs" />
+    <Compile Include="Eval.fs" />
+    <Compile Include="CodeGenerator.fs" />
+    <Compile Include="Compiler.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="FSharp.PowerPack, Version=1.9.6.2, Culture=neutral, PublicKeyToken=a19089b1c74d0809">
+      <Name>FSharp.PowerPack</Name>
+      <AssemblyName>FSharp.PowerPack.dll</AssemblyName>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
     </Reference>
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="ListOp.fs" />
-    <Compile Include="UnaryOp.fs" />
-    <Compile Include="LispVal.fs" />
-    <Compile Include="Quote.fs" />
-    <Compile Include="Evaluator.fs" />
-    <Compile Include="Eval.fs" />
-    <Compile Include="Compiler.fs" />
-  </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\FSharp\1.0\Microsoft.FSharp.Targets" />
+  <Import Project="$(MSBuildExtensionsPath)\FSharp\1.0\FSharp.PowerPack.Targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 	     Other similar extension points exist, see Microsoft.Common.targets.
 	<Target Name="BeforeBuild">
@@ -63,4 +75,8 @@
 	<Target Name="AfterBuild">
 	</Target>
 	-->
+  <!-- <PropertyGroup>
+    <PreBuildEvent>"%ProgramFiles%\FSharp-1.9.6.2\bin\fslex.exe" "$(ProjectDir)FSLex.fsl" -o "$(ProjectDir)FSLex.fs"
+"%ProgramFiles%\FSharp-1.9.6.2\bin\fsyacc.exe" "$(ProjectDir)FSYacc.fsl" -o "$(ProjectDir)FSYacc.fs"</PreBuildEvent>
+  </PropertyGroup> -->
 </Project>

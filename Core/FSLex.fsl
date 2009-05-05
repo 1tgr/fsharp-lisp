@@ -1,0 +1,22 @@
+﻿{
+open System
+open Lexing
+open FSYacc
+}
+
+let digit = ['0'-'9']
+let alpha = ['a'-'z' 'A'-'Z']
+let whitespace = [' ' '\t' ]
+let newline = ('\n' | '\r' '\n')
+let identifier = [^'"' '0'-'9' '(' ')' ' ' '\t' '\n' '\r']
+ 
+rule tokenize = parse
+| whitespace        { tokenize lexbuf }
+| newline           { lexbuf.EndPos <- lexbuf.EndPos.NextLine; tokenize lexbuf }
+| ['-']?digit+      { Digits <| Int32.Parse (lexeme lexbuf) }
+| '('               { LeftParen }
+| ')'               { RightParen }
+| '\''              { Apostrophe }
+| '"' [^'"']* '"'   { let s = lexeme lexbuf in Text <| s.Substring(1, s.Length - 2) }
+| eof               { Eof }
+| identifier+       { Identifier <| lexeme lexbuf }
