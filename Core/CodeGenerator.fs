@@ -14,7 +14,7 @@ module CodeGenerator =
             "System, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"; 
             "System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"
         ]
-        |> List.map Assembly.Load
+        |> List.map Assembly.ReflectionOnlyLoad
 
     let ident env (a : string) =
         match Map.tryFind a env with
