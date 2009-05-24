@@ -14,11 +14,8 @@ module Compiler =
         let meth = typeBuilder.DefineMethod("Main", MethodAttributes.Static ||| MethodAttributes.Public, typeof<Void>, [| |])
         let generator = meth.GetILGenerator()
 
-        let compile env v = 
-            printfn "%A" v
-            v |> Evaluator.insertPrimitives |> CodeGenerator.compile generator typeBuilder env
+        let compile env = Evaluator.insertPrimitives >> CodeGenerator.compile generator typeBuilder env
 
-        printfn "%A" code
         code 
         |> (Map.empty |> List.fold compile) 
         |> ignore
