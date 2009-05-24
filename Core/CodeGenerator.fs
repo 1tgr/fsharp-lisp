@@ -7,6 +7,15 @@ open System.Reflection.Emit
 open MaybeBuilderModule
 
 module CodeGenerator =
+    let usingNamespaces = [ ""; "System"; "System.Diagnostics"; "System.Windows.Forms" ]
+    let referencedAssemblies = 
+        [
+            "mscorlib, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"; 
+            "System, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"; 
+            "System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"
+        ]
+        |> List.map Assembly.Load
+
     let ident env (a : string) =
         match Map.tryFind a env with
         | Some v -> v
@@ -26,10 +35,10 @@ module CodeGenerator =
             | [ ] -> true
             | [ parameterArrayType ] when isParamArray -> true
             | _ -> false
-        | (argType :: otherArgTypes) ->
+        | argType :: otherArgTypes ->
             match parameterTypes with
             | [ ] -> false
-            | (parameterType :: otherParameterTypes) -> 
+            | parameterType :: otherParameterTypes -> 
                 if parameterType.IsAssignableFrom(argType)
                 then methodMatch' isParamArray otherArgTypes otherParameterTypes
                 else false
@@ -71,9 +80,16 @@ module CodeGenerator =
                 let! (typeName, methodName) = 
                     match a.LastIndexOf('.') with
                     | -1 -> None
-                    | n -> Some ("System." + a.Substring(0, n), a.Substring(n + 1))
+                    | n -> Some (a.Substring(0, n), a.Substring(n + 1))
 
-                let! clrType = option_of_nullable <| Type.GetType(typeName)
+                let! clrType =
+                    referencedAssemblies
+                    |> List.map (fun assembly -> 
+                        usingNamespaces 
+                        |> List.map (fun usingNamespace -> (assembly, usingNamespace)))
+                    |> List.concat
+                    |> List.tryPick (fun (assembly, usingNamespace) -> option_of_nullable <| assembly.GetType(usingNamespace + "." + typeName))
+
                 return (clrType, methodName)
             }
 
@@ -84,7 +100,7 @@ module CodeGenerator =
                 |> List.of_array
                 |> List.filter (fun m -> m.Name = methodName)
                 |> List.map makeLambdaRef
-            | None -> List.empty
+            | None -> [ ]
 
         let methodMatch env args = function
             | LambdaRef (_, isParamArray, parameterTypes) ->
@@ -92,10 +108,15 @@ module CodeGenerator =
                 methodMatch' isParamArray argTypes parameterTypes
             | v -> failwith <| sprintf "methodMatch didn't expect %A" v
 
-        envMatches 
-        |> List.append clrMatches
-        |> List.filter (methodMatch env args)
-        |> List.hd
+        let candidates = List.append envMatches clrMatches
+        match candidates with
+        | [ ] -> failwith <| sprintf "no method called %s" a
+        | _ -> ()
+
+        let allMatches = List.filter (methodMatch env args) candidates
+        match allMatches with
+        | [ ] -> failwith <| sprintf "no overload of %s is compatible with %A" a args
+        | firstMatch :: _ -> firstMatch
 
     let rec compile (generator : ILGenerator) (declaringType : TypeBuilder) =
         let rec compile' env =
