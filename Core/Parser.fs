@@ -2,12 +2,7 @@
 namespace Tim.Lisp.Core
 open System.IO
 open System.Text
+open Microsoft.FSharp.Text.Lexing
 
 module Parser =
-    let parseTextReader reader =
-        let lexbuf = Lexing.from_text_reader Encoding.UTF8 reader
-        FSYacc.parse FSLex.tokenize lexbuf
-
-    let parseString s =
-        use reader = new StringReader(s)
-        parseTextReader reader
+    let parseString (s : string) = FSYacc.parse FSLex.tokenize <| LexBuffer<_>.FromBytes(Encoding.UTF8.GetBytes(s))

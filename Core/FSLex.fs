@@ -2,10 +2,11 @@
 # 1 "FSLex.fsl"
 
 open System
-open Lexing
+open System.Text
+open Microsoft.FSharp.Text.Lexing
 open FSYacc
 
-# 8 "FSLex.fs"
+# 9 "FSLex.fs"
 let trans : uint16[] array = 
     [| 
    (* State 0 *)
@@ -42,59 +43,59 @@ let trans : uint16[] array =
  [|65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 15us; 15us; 15us; 15us; 15us; 15us; 15us; 15us; 15us; 15us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; |];
     |] 
 let actions : uint16[] = [|65535us; 0us; 1us; 65535us; 2us; 8us; 3us; 4us; 5us; 65535us; 7us; 8us; 8us; 6us; 65535us; 2us; |]
-let __fslex_tables = Microsoft.FSharp.Text.Lexing.AsciiTables.Create(trans,actions)
-let rec __fslex_dummy () = __fslex_dummy() 
+let _fslex_tables = Microsoft.FSharp.Text.Lexing.AsciiTables.Create(trans,actions)
+let rec _fslex_dummy () = _fslex_dummy() 
 (* Rule tokenize *)
-and tokenize  (lexbuf : Microsoft.FSharp.Text.Lexing.LexBuffer<_>) = __fslex_tokenize  0 lexbuf
-and __fslex_tokenize  __fslex_state lexbuf =
-  match __fslex_tables.Interpret(__fslex_state,lexbuf) with
+and tokenize  (lexbuf : Microsoft.FSharp.Text.Lexing.LexBuffer<_>) = _fslex_tokenize  0 lexbuf
+and _fslex_tokenize  _fslex_state lexbuf =
+  match _fslex_tables.Interpret(_fslex_state,lexbuf) with
   | 0 -> ( 
-# 14 "FSLex.fsl"
+# 15 "FSLex.fsl"
                 tokenize lexbuf 
-# 54 "FSLex.fs"
+# 55 "FSLex.fs"
           )
   | 1 -> ( 
-# 15 "FSLex.fsl"
+# 16 "FSLex.fsl"
                 lexbuf.EndPos <- lexbuf.EndPos.NextLine; tokenize lexbuf 
-# 59 "FSLex.fs"
+# 60 "FSLex.fs"
           )
   | 2 -> ( 
-# 16 "FSLex.fsl"
-                Digits <| Int32.Parse (lexeme lexbuf) 
-# 64 "FSLex.fs"
+# 17 "FSLex.fsl"
+                Digits <| Int32.Parse(Encoding.UTF8.GetString(lexbuf.Lexeme)) 
+# 65 "FSLex.fs"
           )
   | 3 -> ( 
-# 17 "FSLex.fsl"
+# 18 "FSLex.fsl"
                 LeftParen 
-# 69 "FSLex.fs"
+# 70 "FSLex.fs"
           )
   | 4 -> ( 
-# 18 "FSLex.fsl"
+# 19 "FSLex.fsl"
                 RightParen 
-# 74 "FSLex.fs"
+# 75 "FSLex.fs"
           )
   | 5 -> ( 
-# 19 "FSLex.fsl"
+# 20 "FSLex.fsl"
                 Apostrophe 
-# 79 "FSLex.fs"
+# 80 "FSLex.fs"
           )
   | 6 -> ( 
-# 20 "FSLex.fsl"
-                let s = lexeme lexbuf in Text <| s.Substring(1, s.Length - 2) 
-# 84 "FSLex.fs"
+# 21 "FSLex.fsl"
+                let s = Encoding.UTF8.GetString(lexbuf.Lexeme) in Text <| s.Substring(1, s.Length - 2) 
+# 85 "FSLex.fs"
           )
   | 7 -> ( 
-# 21 "FSLex.fsl"
+# 22 "FSLex.fsl"
                 Eof 
-# 89 "FSLex.fs"
+# 90 "FSLex.fs"
           )
   | 8 -> ( 
-# 22 "FSLex.fsl"
-                Identifier <| lexeme lexbuf 
-# 94 "FSLex.fs"
+# 23 "FSLex.fsl"
+                Identifier <| Encoding.UTF8.GetString(lexbuf.Lexeme) 
+# 95 "FSLex.fs"
           )
   | _ -> failwith "tokenize"
 
-# 23 "FSLex.fsl"
+# 24 "FSLex.fsl"
 
 # 3000000 "FSLex.fs"

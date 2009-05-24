@@ -19,7 +19,7 @@ namespace Tim.Lisp.Interactive
             if (text.Length == 0)
                 text = textBox.Text;
 
-            List<LispVal> program;
+            FSharpList<LispVal> program;
             try
             {
                 program = Parser.parseString(text);

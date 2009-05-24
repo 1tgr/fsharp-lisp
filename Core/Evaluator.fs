@@ -5,7 +5,7 @@ open System.Reflection.Emit
 module Evaluator =
     let extractAtom = function
         | Atom a -> a
-        | v -> failwith ("expected atom, got " + any_to_string v)
+        | v -> failwith <| sprintf "expected atom, got %A" v
 
     let rec insertPrimitives = function
         | List (Atom "+" :: args) -> ListPrimitive (Add, args |> List.map insertPrimitives)
@@ -54,7 +54,7 @@ module Evaluator =
                 | Divide -> (/)
                 | Equal -> fun a b -> if a = b then 1 else 0
 
-            (env, args |> List.map (eval env >> snd) |> List.reduce_left (boxUnbox fn))
+            (env, args |> List.map (eval env >> snd) |> List.reduce (boxUnbox fn))
 
         function
         | ArgRef _ -> failwith "cannot evaluate arg reference"
@@ -67,7 +67,7 @@ module Evaluator =
             | _ -> failwith "expected bool expression"
         | LambdaDef (names, code) -> failwith "cannot evaluate lambda"
         | LambdaRef _ -> failwith "didn't expect CompiledLambda"
-        | List l -> failwith ("cannot evaluate list " + any_to_string l)
+        | List l -> failwith <| sprintf "cannot evaluate list %A" l
         | ListPrimitive (op, args) -> evalBinary op args
         | Number n as v -> (env, box n)
         | String s as v -> (env, box s)
