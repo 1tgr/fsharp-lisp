@@ -19,7 +19,7 @@ module CodeGenerator =
     let ident env (a : string) =
         match Map.tryFind a env with
         | Some v -> v
-        | None -> failwith <| "undeclared identifier " + a
+        | None -> failwith <| sprintf "undeclared identifier %s" a
 
     let isParamArray (parameterInfo : #ParameterInfo) = parameterInfo.IsDefined(typeof<ParamArrayAttribute>, true)
     let makeLambdaRef (methodInfo : #MethodInfo) =
@@ -27,21 +27,6 @@ module CodeGenerator =
         let parameterTypes = parameters |> List.of_array |> List.map (fun  p -> p.ParameterType)
         let isParamArray = parameters.Length > 0 && isParamArray parameters.[parameters.Length - 1]
         LambdaRef (methodInfo, isParamArray, parameterTypes)
-
-    let rec methodMatch' isParamArray argTypes (parameterTypes : Type list) =
-        match argTypes with
-        | [ ] ->
-            match parameterTypes with
-            | [ ] -> true
-            | [ parameterArrayType ] when isParamArray -> true
-            | _ -> false
-        | argType :: otherArgTypes ->
-            match parameterTypes with
-            | [ ] -> false
-            | parameterType :: otherParameterTypes -> 
-                if parameterType.IsAssignableFrom(argType)
-                then methodMatch' isParamArray otherArgTypes otherParameterTypes
-                else false
 
     let rec typeOf (env : Map<string, LispVal>) = function
         | ArgRef _ -> typeof<int>
@@ -102,18 +87,32 @@ module CodeGenerator =
                 |> List.map makeLambdaRef
             | None -> [ ]
 
-        let methodMatch env args = function
+        let argsMatchParameters = function
             | LambdaRef (_, isParamArray, parameterTypes) ->
-                let argTypes = args |> List.map (typeOf env)
-                methodMatch' isParamArray argTypes parameterTypes
-            | v -> failwith <| sprintf "methodMatch didn't expect %A" v
+                let rec argsMatchParameters' argTypes (parameterTypes : #Type list) =
+                    match argTypes with
+                    | [ ] ->
+                        match parameterTypes with
+                        | [ ] -> true
+                        | [ parameterArrayType ] when isParamArray -> true
+                        | _ -> false
+                    | argType :: otherArgTypes ->
+                        match parameterTypes with
+                        | [ ] -> false
+                        | parameterType :: otherParameterTypes -> 
+                            if parameterType.IsAssignableFrom(argType)
+                            then argsMatchParameters' otherArgTypes otherParameterTypes
+                            else false
+
+                argsMatchParameters' (List.map (typeOf env) args) parameterTypes
+            | v -> failwith <| sprintf "didn't expect %A" v
 
         let candidates = List.append envMatches clrMatches
         match candidates with
         | [ ] -> failwith <| sprintf "no method called %s" a
         | _ -> ()
 
-        let allMatches = List.filter (methodMatch env args) candidates
+        let allMatches = List.filter argsMatchParameters candidates
         match allMatches with
         | [ ] -> failwith <| sprintf "no overload of %s is compatible with %A" a args
         | firstMatch :: _ -> firstMatch
