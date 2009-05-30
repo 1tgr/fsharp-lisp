@@ -22,12 +22,18 @@ type LispCodeProvider() =
                     |> List.concat
 
                 let results = new CompilerResults(new TempFileCollection())
-                if options.GenerateInMemory
-                then
-                    let (assembly, _, _) = Compiler.compileToMemory (new AssemblyName("output")) statements
-                    results.CompiledAssembly <- assembly
-                else
-                    Compiler.compileToFile options.OutputAssembly statements
+                
+                try
+                    if options.GenerateInMemory
+                    then
+                        let (assembly, _, _) = Compiler.compileToMemory (new AssemblyName("output")) statements
+                        results.CompiledAssembly <- assembly
+                    else
+                        Compiler.compileToFile options.OutputAssembly statements
+                with ex ->
+                    new CompilerError("<source>", 1, 1, "0100", ex.Message) 
+                    |> results.Errors.Add 
+                    |> ignore
 
                 results
         }

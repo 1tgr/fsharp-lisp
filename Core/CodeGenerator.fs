@@ -9,7 +9,7 @@ open MaybeBuilderModule
 module CodeGenerator =
     let extractAtom = function
         | Atom a -> a
-        | v -> failwith <| sprintf "expected atom, got %A" v
+        | v -> raise <| Compiler(sprintf "expected atom, got %A" v)
 
     let rec insertPrimitives = function
         | List (Atom "+" :: args) -> ListPrimitive (Add, args |> List.map insertPrimitives)
@@ -21,22 +21,22 @@ module CodeGenerator =
             match args with
             | [ Atom name; v ] -> VariableDef (name, insertPrimitives v)
             | [ List (Atom name :: names); body ] -> VariableDef (name, LambdaDef (names |> List.map extractAtom, insertPrimitives body))
-            | _ -> failwith "expected define name value"
+            | _ -> raise <| Compiler "expected define name value"
 
         | List (Atom "if" :: args) ->
             match args with
             | [ testValue; thenValue; elseValue ] -> IfPrimitive (insertPrimitives testValue, insertPrimitives thenValue, insertPrimitives elseValue)
-            | _ -> failwith "expected three items for if"
+            | _ -> raise <| Compiler "expected three items for if"
 
         | List (Atom "quote" :: args) -> 
             match args with
             | [ v ] -> QuotePrimitive v
-            | _ -> failwith "expected one item for quote"
+            | _ -> raise <| Compiler "expected one item for quote"
 
         | List (Atom "lambda" :: args) ->
             match args with
             | [ List names; body ] -> LambdaDef (names |> List.map extractAtom, insertPrimitives body)
-            | _ -> failwith "expected lambda names body"
+            | _ -> raise <| Compiler "expected lambda names body"
 
         | List l -> l |> List.map insertPrimitives |> List
         | v -> v
@@ -53,7 +53,7 @@ module CodeGenerator =
     let ident env (a : string) =
         match Map.tryFind a env with
         | Some v -> v
-        | None -> raise <| new InvalidOperationException(sprintf "undeclared identifier %s" a)
+        | None -> raise <| Compiler(sprintf "undeclared identifier %s" a)
 
     let isParamArray (parameterInfo : #ParameterInfo) = parameterInfo.IsDefined(typeof<ParamArrayAttribute>, true)
     let makeLambdaRef (methodInfo : #MethodInfo) =
@@ -69,13 +69,13 @@ module CodeGenerator =
         | IfPrimitive (_, thenValue, elseValue) ->
             match typeOf env thenValue with
             | t when t = typeOf env elseValue -> t
-            | _ -> raise <| new InvalidOperationException("expected 'then' and 'else' branches to have same type")
+            | _ -> raise <| Compiler("expected 'then' and 'else' branches to have same type")
 
         | LambdaDef (_, body) -> typeOf env body
         | LambdaRef (methodBuilder, _, _) -> methodBuilder.ReturnType
         | List (Atom a :: args) -> a |> lambdaIdent args env |> typeOf env
-        | List (fn :: _) -> raise <| new InvalidOperationException(sprintf "can't invoke %A" fn)
-        | List [ ] -> raise <| new InvalidOperationException("can't compile empty list")
+        | List (fn :: _) -> raise <| Compiler(sprintf "can't invoke %A" fn)
+        | List [ ] -> raise <| Compiler("can't compile empty list")
         | ListPrimitive _ -> typeof<int>
         | Number _ -> typeof<int>
         | String _ -> typeof<string>
@@ -119,7 +119,9 @@ module CodeGenerator =
                 |> List.of_array
                 |> List.filter (fun m -> m.Name = methodName)
                 |> List.map makeLambdaRef
-            | None -> [ ]
+
+            | None -> 
+                [ ]
 
         let argsMatchParameters = function
             | LambdaRef (_, isParamArray, parameterTypes) ->
@@ -139,16 +141,17 @@ module CodeGenerator =
                             else false
 
                 argsMatchParameters' (List.map (typeOf env) args) parameterTypes
-            | v -> raise <| new InvalidOperationException(sprintf "didn't expect %A" v)
+
+            | _ -> false
 
         let candidates = List.append envMatches clrMatches
         match candidates with
-        | [ ] -> raise <| new InvalidOperationException(sprintf "no method called %s" a)
+        | [ ] -> raise <| Compiler(sprintf "no method called %s" a)
         | _ -> ()
 
         let allMatches = List.filter argsMatchParameters candidates
         match allMatches with
-        | [ ] -> raise <| new InvalidOperationException(sprintf "no overload of %s is compatible with %A" a args)
+        | [ ] -> raise <| Compiler(sprintf "no overload of %s is compatible with %A" a args)
         | firstMatch :: _ -> firstMatch
 
     let rec compile (generator : ILGenerator) defineMethod =
@@ -187,10 +190,10 @@ module CodeGenerator =
                 env'
 
             | LambdaDef _ -> 
-                raise <| new NotSupportedException("didn't expect lambda outside variable")
+                raise <| new NotImplementedException("didn't expect lambda outside variable")
 
             | LambdaRef _ -> 
-                raise <| new InvalidOperationException("can't compile lambda - try invoking it instead")
+                raise <| Compiler("can't compile lambda - try invoking it instead")
 
             | List (Atom a :: args) ->
                 match lambdaIdent args env a with
@@ -205,45 +208,40 @@ module CodeGenerator =
                     let rec emitArgs parameterTypes env args =
                         match parameterTypes with
                         | [ parameterType ] ->
-                            match args with
-                            | [ ] -> raise <| new InvalidOperationException("provided 1 too few args")
-                            | arg :: otherArgs ->
-                                if isParamArray
-                                then
-                                    let storeElement (env, position) x =
-                                        generator.Emit(OpCodes.Dup)
-                                        generator.Emit(OpCodes.Ldc_I4, int position)
-                                        let env' = emitBoxed parameterType env x
-                                        generator.Emit(OpCodes.Stelem, (parameterType :> Type))
-                                        (env', position + 1)
+                            let (arg, otherArgs) = List.hd args, List.tl args
+                            if isParamArray
+                            then
+                                let storeElement (env, position) x =
+                                    generator.Emit(OpCodes.Dup)
+                                    generator.Emit(OpCodes.Ldc_I4, int position)
+                                    let env' = emitBoxed parameterType env x
+                                    generator.Emit(OpCodes.Stelem, (parameterType :> Type))
+                                    (env', position + 1)
 
-                                    generator.Emit(OpCodes.Ldc_I4, List.length args)
-                                    generator.Emit(OpCodes.Newarr, (parameterType :> Type))
-                                    args |> List.fold storeElement (env, 0) |> fst
-                                else
-                                    emitArgs [ ] (emitBoxed parameterType env arg) otherArgs
+                                generator.Emit(OpCodes.Ldc_I4, List.length args)
+                                generator.Emit(OpCodes.Newarr, (parameterType :> Type))
+                                args |> List.fold storeElement (env, 0) |> fst
+                            else
+                                emitArgs [ ] (emitBoxed parameterType env arg) otherArgs
 
                         | parameterType :: otherParameterTypes ->
-                            match args with
-                            | [ ] -> raise <| new InvalidOperationException(sprintf "provided %d too few args" <| List.length parameterTypes)
-                            | arg :: otherArgs -> emitArgs otherParameterTypes (emitBoxed parameterType env arg) otherArgs
+                            let (arg, otherArgs) = List.hd args, List.tl args
+                            emitArgs otherParameterTypes (emitBoxed parameterType env arg) otherArgs
 
                         | [ ] -> 
-                            match args with
-                            | [ ] -> env
-                            | args -> raise <| new InvalidOperationException(sprintf "provided %d too many args" <| List.length args)
+                            env
 
                     let env' = args |> emitArgs parameterTypes env
                     generator.Emit(OpCodes.Call, methodInfo)
                     env'
 
-                | v -> raise <| new InvalidOperationException(sprintf "can't invoke variable %A" v)
+                | v -> raise <| new NotImplementedException(sprintf "can't invoke variable %A" v)
 
             | List (fn :: args) -> 
-                raise <| new InvalidOperationException(sprintf "can't invoke value %A" fn)
+                raise <| new NotImplementedException(sprintf "can't invoke value %A" fn)
 
             | List [ ] -> 
-                raise <| new InvalidOperationException("can't invoke empty list")
+                raise <| Compiler("can't invoke empty list")
 
             | ListPrimitive (op, args) -> 
                 match args with
@@ -261,7 +259,7 @@ module CodeGenerator =
                         match typeOf env x with
                         | t when t = typeof<obj> -> generator.Emit(OpCodes.Call, typeof<Convert>.GetMethod("ToInt32", [| typeof<obj> |]))
                         | t when t = typeof<int> -> ()
-                        | t -> raise <| new InvalidOperationException("expected int, got " + t.Name)
+                        | t -> raise <| new NotImplementedException("expected int, got " + t.Name)
                         env'
 
                     let emitBinaryOp env arg =
@@ -272,7 +270,8 @@ module CodeGenerator =
                     let env' = coerceToInt env arg
                     otherArgs |> List.fold emitBinaryOp env'
 
-                | l -> raise <| new InvalidOperationException(sprintf "cannot compile list %A" l)
+                | l -> 
+                    raise <| Compiler(sprintf "cannot compile list %A" l)
 
             | Number n -> 
                 generator.Emit(OpCodes.Ldc_I4, n)
