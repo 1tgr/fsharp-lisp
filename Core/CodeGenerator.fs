@@ -4,7 +4,7 @@ namespace Tim.Lisp.Core
 open System
 open System.Reflection
 open System.Reflection.Emit
-open MaybeBuilderModule
+open MaybeBuilder
 
 module CodeGenerator =
     let extractAtom = function
