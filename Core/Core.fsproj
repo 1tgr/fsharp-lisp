@@ -44,15 +44,12 @@
     <FsYacc Include="FSYacc.fsy" />
     <FsLex Include="FSLex.fsl" />
     <Compile Include="ListOp.fs" />
-    <Compile Include="UnaryOp.fs" />
     <Compile Include="LispVal.fs" />
     <Compile Include="FSYacc.fsi" />
     <Compile Include="FSYacc.fs" />
     <Compile Include="FSLex.fs" />
     <Compile Include="Parser.fs" />
     <Compile Include="Quote.fs" />
-    <Compile Include="Evaluator.fs" />
-    <Compile Include="Eval.fs" />
     <Compile Include="MaybeBuilder.fs" />
     <Compile Include="CodeGenerator.fs" />
     <Compile Include="Compiler.fs" />

@@ -13,7 +13,7 @@ module Program =
             @"
 (define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))
 (Console.WriteLine ""6! = {0}"" (fact 6))
-(Console.WriteLine ""What is your name?"" """")
+(Console.WriteLine ""What is your name?"")
 (Console.WriteLine ""Hello, {0}"" (Console.ReadLine))"
             |> Parser.parseString 
             |> Compiler.compileToFile "output.exe" 

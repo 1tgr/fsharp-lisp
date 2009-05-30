@@ -14,7 +14,7 @@ type LispVal =
              | List of LispVal list
              | ListPrimitive of ListOp * LispVal list
              | Number of int
+             | QuotePrimitive of LispVal
              | String of string
-             | UnaryPrimitive of UnaryOp * LispVal
              | VariableDef of string * LispVal
              | VariableRef of LocalBuilder
