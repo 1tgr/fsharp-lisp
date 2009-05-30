@@ -1,7 +1,6 @@
 ﻿using System;
-using System.CodeDom.Compiler;
-using System.Reflection;
 using System.Windows.Forms;
+using Microsoft.FSharp.Collections;
 using Tim.Lisp.Core;
 
 namespace Tim.Lisp.Interactive
@@ -19,10 +18,9 @@ namespace Tim.Lisp.Interactive
             if (text.Length == 0)
                 text = textBox.Text;
 
-            CompilerResults results = new LispCodeProvider().CompileAssemblyFromSource(new CompilerParameters { GenerateInMemory = true }, text);
-            Type programType = results.CompiledAssembly.GetType("Program");
-            MethodInfo mainMethod = programType.GetMethod("Main");
-            mainMethod.Invoke(null, new object[] { });
+            FSharpList<LispVal> code = Parser.parseString(text);
+            Action action = (Action) Compiler.compileToDelegate(typeof(Action), code);
+            action();
         }
     }
 }

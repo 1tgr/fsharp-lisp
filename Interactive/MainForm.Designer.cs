@@ -47,6 +47,16 @@
             toolStrip1.TabIndex = 0;
             toolStrip1.Text = "toolStrip1";
             // 
+            // toolStripButton1
+            // 
+            toolStripButton1.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            toolStripButton1.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton1.Image")));
+            toolStripButton1.ImageTransparentColor = System.Drawing.Color.Magenta;
+            toolStripButton1.Name = "toolStripButton1";
+            toolStripButton1.Size = new System.Drawing.Size(30, 22);
+            toolStripButton1.Text = "&Run";
+            toolStripButton1.Click += new System.EventHandler(this.toolStripButton1_Click);
+            // 
             // textBox
             // 
             this.textBox.AcceptsReturn = true;
@@ -58,17 +68,9 @@
             this.textBox.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
             this.textBox.Size = new System.Drawing.Size(292, 241);
             this.textBox.TabIndex = 1;
+            this.textBox.Text = "(define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))\r\n(MessageBox.Show (String.F" +
+                "ormat \"6! = {0}\" (fact 6)) \"Lisp Demo\")";
             this.textBox.WordWrap = false;
-            // 
-            // toolStripButton1
-            // 
-            toolStripButton1.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
-            toolStripButton1.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton1.Image")));
-            toolStripButton1.ImageTransparentColor = System.Drawing.Color.Magenta;
-            toolStripButton1.Name = "toolStripButton1";
-            toolStripButton1.Size = new System.Drawing.Size(30, 22);
-            toolStripButton1.Text = "&Run";
-            toolStripButton1.Click += new System.EventHandler(this.toolStripButton1_Click);
             // 
             // MainForm
             // 

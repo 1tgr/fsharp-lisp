@@ -28,8 +28,8 @@ module Compiler =
 
         generator.Emit OpCodes.Ret
 
-    let compileToDelegate delegateType code =
-        let returnType = delegateType.GetType().GetMethod("Invoke").ReturnType
+    let compileToDelegate (delegateType : #Type) code =
+        let returnType = delegateType.GetMethod("Invoke", BindingFlags.Public ||| BindingFlags.Instance).ReturnType
         let meth = new DynamicMethod("Main", returnType, Type.EmptyTypes)
         let generator = meth.GetILGenerator()
 
