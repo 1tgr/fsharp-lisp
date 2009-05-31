@@ -218,8 +218,12 @@ module CodeGenerator =
                     let emitBoxed (expectedType : #Type) env x =
                         let env' = compile' env x
                         match typeOf env x with
-                        | a when not expectedType.IsValueType && a.IsValueType -> generator.Emit(OpCodes.Box, a)
-                        | _ -> ()
+                        | a when not expectedType.IsValueType && a.IsValueType -> 
+                            generator.Emit(OpCodes.Box, a)
+
+                        | _ ->
+                            ()
+
                         env'
 
                     let rec emitArgs (parameterTypes : #Type list) env args =
@@ -227,16 +231,21 @@ module CodeGenerator =
                         | arg :: otherArgs, [ parameterType ] when isParamArray ->
                             let elementType = parameterType.GetElementType()
 
-                            let storeElement (env, position) x =
-                                generator.Emit(OpCodes.Dup)
-                                generator.Emit(OpCodes.Ldc_I4, int position)
-                                let env' = emitBoxed elementType env x
-                                generator.Emit(OpCodes.Stelem, elementType)
-                                (env', position + 1)
+                            let rec emitArrayInit env position =
+                                function
+                                | value :: values ->
+                                    generator.Emit(OpCodes.Dup)
+                                    generator.Emit(OpCodes.Ldc_I4, int position)
+                                    let env' = emitBoxed elementType env value
+                                    generator.Emit(OpCodes.Stelem, elementType)
+                                    emitArrayInit env' (position + 1) values
+
+                                | [ ] -> 
+                                    env
 
                             generator.Emit(OpCodes.Ldc_I4, List.length args)
                             generator.Emit(OpCodes.Newarr, elementType)
-                            args |> List.fold storeElement (env, 0) |> fst
+                            emitArrayInit env 0 args
 
                         | arg :: otherArgs, parameterType :: otherParameterTypes ->
                             emitArgs otherParameterTypes (emitBoxed parameterType env arg) otherArgs
