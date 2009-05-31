@@ -11,7 +11,8 @@ module Program =
         try
             let code = @"
 (define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))
-(Console.WriteLine ""6! = {0}"" (fact 6))
+(define number 6)
+(Console.WriteLine (String.Concat ""{0}"" ""{1}"" "" "" ""{2}"" ""{3}"") number ""!"" ""="" (fact number))
 (Console.WriteLine ""What is your name?"")
 (Console.WriteLine ""Hello, {0}"" (Console.ReadLine))"
 

@@ -58,7 +58,7 @@ module CodeGenerator =
     let isParamArray (parameterInfo : #ParameterInfo) = parameterInfo.IsDefined(typeof<ParamArrayAttribute>, true)
     let makeLambdaRef (methodInfo : #MethodInfo) =
         let parameters = methodInfo.GetParameters()
-        let parameterTypes = parameters |> List.of_array |> List.map (fun  p -> p.ParameterType)
+        let parameterTypes = parameters |> List.of_array |> List.map (fun p -> p.ParameterType)
         let isParamArray = parameters.Length > 0 && isParamArray parameters.[parameters.Length - 1]
         LambdaRef (methodInfo, isParamArray, parameterTypes)
 
@@ -126,19 +126,36 @@ module CodeGenerator =
         let argsMatchParameters = function
             | LambdaRef (_, isParamArray, parameterTypes) ->
                 let rec argsMatchParameters' argTypes (parameterTypes : #Type list) =
-                    match argTypes with
-                    | [ ] ->
-                        match parameterTypes with
-                        | [ ] -> true
-                        | [ _ ] when isParamArray -> true
-                        | _ -> false
-                    | argType :: otherArgTypes ->
-                        match parameterTypes with
-                        | [ ] -> false
-                        | parameterType :: otherParameterTypes -> 
-                            if parameterType.IsAssignableFrom(argType)
-                            then argsMatchParameters' otherArgTypes otherParameterTypes
-                            else false
+                    match argTypes, parameterTypes with
+                    | [ ], [ ] -> 
+                        // No args and no parameters -> always OK
+                        true
+
+                    | [ ], [ _ ] -> 
+                        // No args and one parameter -> OK only for params array methods
+                        isParamArray
+
+                    | [ ], _ ->
+                        // No args and two or more parameters -> never OK
+                        false
+
+                    | argType :: otherArgTypes, [ parameterType ] when isParamArray -> 
+                        // One or more args and one parameter, in a params array method ->
+                        //  OK if the types of the first arg and the params array are compatible,
+                        //  and the rest of the args match the params array
+                        parameterType.GetElementType().IsAssignableFrom(argType) 
+                        && argsMatchParameters' otherArgTypes parameterTypes
+
+                    | argType :: otherArgTypes, parameterType :: otherParameterTypes -> 
+                        // One or more args and one or more parameters -> 
+                        //  OK if the types of the first arg and parameter are compatible, 
+                        //  and the rest of the args match the rest of the parameters
+                        parameterType.IsAssignableFrom(argType) 
+                        && argsMatchParameters' otherArgTypes otherParameterTypes
+
+                    | _ :: _, [ ] -> 
+                        // One or more args and no parameters -> never OK
+                        false
 
                 argsMatchParameters' (List.map (typeOf env) args) parameterTypes
 
@@ -205,31 +222,33 @@ module CodeGenerator =
                         | _ -> ()
                         env'
 
-                    let rec emitArgs parameterTypes env args =
-                        match parameterTypes with
-                        | [ parameterType ] ->
-                            let (arg, otherArgs) = List.hd args, List.tl args
-                            if isParamArray
-                            then
-                                let storeElement (env, position) x =
-                                    generator.Emit(OpCodes.Dup)
-                                    generator.Emit(OpCodes.Ldc_I4, int position)
-                                    let env' = emitBoxed parameterType env x
-                                    generator.Emit(OpCodes.Stelem, (parameterType :> Type))
-                                    (env', position + 1)
+                    let rec emitArgs (parameterTypes : #Type list) env args =
+                        match args, parameterTypes with
+                        | arg :: otherArgs, [ parameterType ] when isParamArray ->
+                            let elementType = parameterType.GetElementType()
 
-                                generator.Emit(OpCodes.Ldc_I4, List.length args)
-                                generator.Emit(OpCodes.Newarr, (parameterType :> Type))
-                                args |> List.fold storeElement (env, 0) |> fst
-                            else
-                                emitArgs [ ] (emitBoxed parameterType env arg) otherArgs
+                            let storeElement (env, position) x =
+                                generator.Emit(OpCodes.Dup)
+                                generator.Emit(OpCodes.Ldc_I4, int position)
+                                let env' = emitBoxed elementType env x
+                                generator.Emit(OpCodes.Stelem, elementType)
+                                (env', position + 1)
 
-                        | parameterType :: otherParameterTypes ->
-                            let (arg, otherArgs) = List.hd args, List.tl args
+                            generator.Emit(OpCodes.Ldc_I4, List.length args)
+                            generator.Emit(OpCodes.Newarr, elementType)
+                            args |> List.fold storeElement (env, 0) |> fst
+
+                        | arg :: otherArgs, parameterType :: otherParameterTypes ->
                             emitArgs otherParameterTypes (emitBoxed parameterType env arg) otherArgs
 
-                        | [ ] -> 
+                        | [ ], [ ] -> 
                             env
+
+                        | _ :: _, [ ] -> 
+                            raise <| new InvalidOperationException(sprintf "got %d too many args" <| List.length args)
+
+                        | [ ], _ :: _ -> 
+                            raise <| new InvalidOperationException(sprintf "got %d too few args" <| List.length parameterTypes)
 
                     let env' = args |> emitArgs parameterTypes env
                     generator.Emit(OpCodes.Call, methodInfo)
