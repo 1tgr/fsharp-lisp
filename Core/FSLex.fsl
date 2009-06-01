@@ -17,7 +17,6 @@ rule tokenize = parse
 | ['-']?digit+      { Digits <| Int32.Parse(Encoding.UTF8.GetString(lexbuf.Lexeme)) }
 | '('               { LeftParen }
 | ')'               { RightParen }
-| '\''              { Apostrophe }
 | '"' [^'"']* '"'   { let s = Encoding.UTF8.GetString(lexbuf.Lexeme) in Text <| s.Substring(1, s.Length - 2) }
 | eof               { Eof }
 | identifier+       { Identifier <| Encoding.UTF8.GetString(lexbuf.Lexeme) }

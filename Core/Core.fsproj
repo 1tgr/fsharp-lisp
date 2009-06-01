@@ -49,7 +49,6 @@
     <Compile Include="FSYacc.fs" />
     <Compile Include="FSLex.fs" />
     <Compile Include="Parser.fs" />
-    <Compile Include="Quote.fs" />
     <Compile Include="MaybeBuilder.fs" />
     <Compile Include="CompilerException.fs" />
     <Compile Include="CodeGenerator.fs" />

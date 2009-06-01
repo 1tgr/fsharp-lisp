@@ -28,11 +28,6 @@ module CodeGenerator =
             | [ testValue; thenValue; elseValue ] -> IfPrimitive (insertPrimitives testValue, insertPrimitives thenValue, insertPrimitives elseValue)
             | _ -> raise <| Compiler "expected three items for if"
 
-        | List (Atom "quote" :: args) -> 
-            match args with
-            | [ v ] -> QuotePrimitive v
-            | _ -> raise <| Compiler "expected one item for quote"
-
         | List (Atom "lambda" :: args) ->
             match args with
             | [ List names; body ] -> LambdaDef (names |> List.map extractAtom, insertPrimitives body)
@@ -79,7 +74,6 @@ module CodeGenerator =
         | ListPrimitive _ -> typeof<int>
         | Number _ -> typeof<int>
         | String _ -> typeof<string>
-        | QuotePrimitive _ -> typeof<LispVal>
         | VariableDef _ -> typeof<Void>
         | VariableRef local -> local.LocalType
 
@@ -308,24 +302,6 @@ module CodeGenerator =
             | String s -> 
                 generator.Emit(OpCodes.Ldstr, s)
                 env
-
-            | QuotePrimitive (Bool b) -> 
-                generator.Emit(if b then OpCodes.Ldc_I4_1 else OpCodes.Ldc_I4_0)
-                generator.Emit(OpCodes.Call, typeof<Quote>.GetMethod("Bool"))
-                env
-
-            | QuotePrimitive (Number n) -> 
-                generator.Emit(OpCodes.Ldc_I4, n)
-                generator.Emit(OpCodes.Call, typeof<Quote>.GetMethod("Number"))
-                env
-
-            | QuotePrimitive (String s) -> 
-                generator.Emit(OpCodes.Ldstr, s)
-                generator.Emit(OpCodes.Call, typeof<Quote>.GetMethod("String"))
-                env
-
-            | QuotePrimitive v -> 
-                raise <| new NotImplementedException(sprintf "cannot quote %A yet" v)
 
             | VariableDef (name, value) ->
                 match value with

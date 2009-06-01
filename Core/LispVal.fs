@@ -14,7 +14,6 @@ type LispVal =
              | List of LispVal list                         // List constant
              | ListPrimitive of ListOp * LispVal list       // Built-in list operation
              | Number of int                                // Integer constant
-             | QuotePrimitive of LispVal                    // Quotation
              | String of string                             // String constant
              | VariableDef of string * LispVal              // Variable declaration
              | VariableRef of LocalBuilder                  // Value of variable
