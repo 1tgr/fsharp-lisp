@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Windows.Forms;
 using Microsoft.FSharp.Collections;
+using Microsoft.FSharp.Core;
 using Tim.Lisp.Core;
 
 namespace Tim.Lisp.Interactive
@@ -19,6 +20,8 @@ namespace Tim.Lisp.Interactive
                 text = textBox.Text;
 
             FSharpList<LispVal> code = Parser.parseString(text);
+            expressionTreeTextBox.Text = ExtraTopLevelOperators.any_to_string(code).Replace("\n", "\r\n");
+
             Action action = (Action) Compiler.compileToDelegate(typeof(Action), code);
             action();
         }

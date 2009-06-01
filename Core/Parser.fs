@@ -1,6 +1,5 @@
 ﻿#light
 namespace Tim.Lisp.Core
-open System.IO
 open System.Text
 open Microsoft.FSharp.Text.Lexing
 
