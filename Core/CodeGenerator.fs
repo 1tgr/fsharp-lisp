@@ -11,7 +11,8 @@ module CodeGenerator =
         | Atom a -> a
         | v -> raise <| Compiler(sprintf "expected atom, got %A" v)
 
-    let rec insertPrimitives = function
+    let rec insertPrimitives = 
+        function
         | List (Atom "+" :: args) -> ListPrimitive (Add, args |> List.map insertPrimitives)
         | List (Atom "-" :: args) -> ListPrimitive (Subtract, args |> List.map insertPrimitives)
         | List (Atom "*" :: args) -> ListPrimitive (Multiply, args |> List.map insertPrimitives)
@@ -19,21 +20,34 @@ module CodeGenerator =
         | List (Atom "=" :: args) -> ListPrimitive (Equal, args |> List.map insertPrimitives)
         | List (Atom "define" :: args) ->
             match args with
-            | [ Atom name; v ] -> VariableDef (name, insertPrimitives v)
-            | [ List (Atom name :: names); body ] -> VariableDef (name, LambdaDef (names |> List.map extractAtom, insertPrimitives body))
-            | _ -> raise <| Compiler "expected define name value"
+            | [ Atom name; v ] -> 
+                VariableDef (name, insertPrimitives v)
+
+            | [ List (Atom name :: names); body ] -> 
+                VariableDef (name, LambdaDef (names |> List.map extractAtom, insertPrimitives body))
+
+            | _ -> 
+                raise <| Compiler "expected define name value"
 
         | List (Atom "if" :: args) ->
             match args with
-            | [ testValue; thenValue; elseValue ] -> IfPrimitive (insertPrimitives testValue, insertPrimitives thenValue, insertPrimitives elseValue)
-            | _ -> raise <| Compiler "expected three items for if"
+            | [ testValue; thenValue; elseValue ] -> 
+                IfPrimitive (insertPrimitives testValue, insertPrimitives thenValue, insertPrimitives elseValue)
+
+            | _ -> 
+                raise <| Compiler "expected three items for if"
 
         | List (Atom "lambda" :: args) ->
             match args with
-            | [ List names; body ] -> LambdaDef (names |> List.map extractAtom, insertPrimitives body)
-            | _ -> raise <| Compiler "expected lambda names body"
+            | [ List names; body ] -> 
+                LambdaDef (names |> List.map extractAtom, insertPrimitives body)
 
-        | List l -> l |> List.map insertPrimitives |> List
+            | _ -> 
+                raise <| Compiler "expected lambda names body"
+
+        | List l -> 
+            l |> List.map insertPrimitives |> List
+
         | v -> v
 
     let usingNamespaces = [ ""; "System"; "System.Diagnostics"; "System.Windows.Forms" ]
