@@ -7,6 +7,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Compiler", "Compiler\Compil
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Interactive", "Interactive\Interactive.csproj", "{AF402994-A6BD-4CAB-9811-957CE3CF09D2}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Core.UnitTests", "Core.UnitTests\Core.UnitTests.fsproj", "{04DA2950-6598-4B9D-879C-7C6A8440279A}"
+EndProject
 Global
 	GlobalSection(SourceCodeControl) = preSolution
 		SccNumberOfProjects = 4
@@ -36,6 +38,10 @@ Global
 		{AF402994-A6BD-4CAB-9811-957CE3CF09D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AF402994-A6BD-4CAB-9811-957CE3CF09D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AF402994-A6BD-4CAB-9811-957CE3CF09D2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{04DA2950-6598-4B9D-879C-7C6A8440279A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{04DA2950-6598-4B9D-879C-7C6A8440279A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{04DA2950-6598-4B9D-879C-7C6A8440279A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{04DA2950-6598-4B9D-879C-7C6A8440279A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

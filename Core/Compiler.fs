@@ -5,16 +5,17 @@ open System
 open System.IO
 open System.Reflection
 open System.Reflection.Emit
+open ILBlockModule
 
 module Compiler =
-    let compile expectedReturnType generator defineMethod code =
+    let compile expectedReturnType target code =
         let rec tryLast = function
             | [ item ] -> Some item
             | item :: items -> tryLast items
             | [ ] -> None
 
-        let compile' env = CodeGenerator.insertPrimitives >> CodeGenerator.compile generator defineMethod env
-        let env = code |> List.fold compile' Map.empty
+        let env, head, tail = code |> CodeGenerator.compile target Map.empty
+        let epilogBlock = new ILBlock()
 
         let returnType = 
             match code |> tryLast with
@@ -22,40 +23,32 @@ module Compiler =
             | None -> typeof<Void>
 
         if expectedReturnType = typeof<Void> && returnType <> typeof<Void> then
-            generator.Emit OpCodes.Pop
+            emit epilogBlock Pop
         else if (not expectedReturnType.IsValueType) && returnType.IsValueType then
-            generator.Emit(OpCodes.Box, returnType)
+            emit epilogBlock (Box returnType)
 
-        generator.Emit OpCodes.Ret
+        tail.Branch <- Br epilogBlock
+        epilogBlock.Branch <- Ret
+        target.GenerateIL head
 
     let compileToDelegate (delegateType : #Type) code =
         let returnType = delegateType.GetMethod("Invoke", BindingFlags.Public ||| BindingFlags.Instance).ReturnType
         let meth = new DynamicMethod("Main", returnType, Type.EmptyTypes)
-        let generator = meth.GetILGenerator()
-
-        let defineMethod name returnType parameterTypes = 
-            let methodInfo = new DynamicMethod(name, returnType, Array.of_list parameterTypes)
-            (methodInfo, methodInfo.GetILGenerator())
-
-        compile returnType generator defineMethod code
+        let target = new DynamicMethodTarget(meth)
+        compile returnType target code
         meth.CreateDelegate(delegateType)
 
     let compileToMemory assemblyName code =
         let a = AppDomain.CurrentDomain.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndSave)
         let m = a.DefineDynamicModule (assemblyName.Name + ".exe")
         let typeBuilder = m.DefineType("Program", TypeAttributes.Sealed ||| TypeAttributes.Public)
-        let meth = typeBuilder.DefineMethod("Main", MethodAttributes.Static ||| MethodAttributes.Public, typeof<Void>, [| |])
-        let generator = meth.GetILGenerator()
-
-        let defineMethod name returnType parameterTypes = 
-            let methodInfo = typeBuilder.DefineMethod(name, MethodAttributes.Static ||| MethodAttributes.Private, returnType, Array.of_list parameterTypes)
-            (methodInfo, methodInfo.GetILGenerator())
-
-        compile typeof<Void> generator defineMethod code
+        let methodBuilder = typeBuilder.DefineMethod("Main", MethodAttributes.Static ||| MethodAttributes.Public, typeof<Void>, [| |])
+        let target = new MethodBuilderTarget(typeBuilder, methodBuilder)
+        compile typeof<Void> target code
 
         let concreteType = typeBuilder.CreateType()
-        a.SetEntryPoint(meth)
-        (a, concreteType, meth)
+        a.SetEntryPoint(methodBuilder)
+        (a, concreteType, methodBuilder)
 
     let compileToFile filename code =
         let assemblyName = new AssemblyName (Path.GetFileNameWithoutExtension filename)

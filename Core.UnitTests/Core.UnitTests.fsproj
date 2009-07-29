@@ -5,13 +5,12 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>8.0.30703</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{51c5ce1d-e45f-44c1-a0dc-6432c0263969}</ProjectGuid>
+    <ProjectGuid>{04da2950-6598-4b9d-879c-7c6a8440279a}</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>Tim.Lisp.Core</RootNamespace>
-    <AssemblyName>Tim.Lisp.Core</AssemblyName>
+    <RootNamespace>Core.UnitTests</RootNamespace>
+    <AssemblyName>Tim.Lisp.Core.UnitTests</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <Name>Core</Name>
+    <Name>Core.UnitTests</Name>
     <SccProjectName>SAK</SccProjectName>
     <SccProvider>SAK</SccProvider>
     <SccAuxPath>SAK</SccAuxPath>
@@ -21,17 +20,17 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
     <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
     <WarningLevel>3</WarningLevel>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
+    <Tailcalls>true</Tailcalls>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
     <WarningLevel>3</WarningLevel>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -41,37 +40,35 @@
     <OutputPath>..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <FsYacc Include="FSYacc.fsy" />
-    <FsLex Include="FSLex.fsl" />
-    <Compile Include="ListOp.fs" />
-    <Compile Include="LispVal.fs" />
-    <Compile Include="FSYacc.fsi" />
-    <Compile Include="FSYacc.fs" />
-    <Compile Include="FSLex.fs" />
-    <Compile Include="Parser.fs" />
-    <Compile Include="MaybeBuilder.fs" />
-    <Compile Include="CompilerException.fs" />
-    <Compile Include="ILOpCode.fs" />
-    <Compile Include="ILBranchOpCode_ILBlock.fs" />
-    <Compile Include="IILTarget.fs" />
-    <Compile Include="CodeGenerator.fs" />
-    <Compile Include="ILTargetBase.fs" />
-    <Compile Include="DynamicMethodTarget.fs" />
-    <Compile Include="MethodBuilderTarget.fs" />
-    <Compile Include="Compiler.fs" />
-    <Compile Include="LispCodeProvider.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="FSharp.PowerPack, Version=1.9.6.16, Culture=neutral, PublicKeyToken=a19089b1c74d0809">
-      <Name>FSharp.PowerPack</Name>
-      <AssemblyName>FSharp.PowerPack.dll</AssemblyName>
+    <Reference Include="mscorlib" />
+    <Reference Include="FSharp.Core" />
+    <Reference Include="nunit.framework, Version=2.4.8.0, Culture=neutral, PublicKeyToken=96d09a1eb7f44a77">
+      <Name>nunit.framework</Name>
+      <AssemblyName>nunit.framework.dll</AssemblyName>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\lib\nunit.framework.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="System" />
-    <Reference Include="System.Core">
-      <RequiredTargetFramework>3.5</RequiredTargetFramework>
+    <Reference Include="System.Core, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089">
+      <Name>System.Core</Name>
+      <AssemblyName>System.Core.dll</AssemblyName>
+      <SpecificVersion>False</SpecificVersion>
     </Reference>
   </ItemGroup>
-  <Import Project="$(MSBuildExtensionsPath)\FSharp\1.0\FSharp.PowerPack.Targets" />
+  <ItemGroup>
+    <Compile Include="Eval.fs" />
+    <Compile Include="Assertion.fs" />
+    <Compile Include="CompilerTests.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Core\Core.fsproj">
+      <Name>Core</Name>
+      <Project>{51c5ce1d-e45f-44c1-a0dc-6432c0263969}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\FSharp\1.0\Microsoft.FSharp.Targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 	     Other similar extension points exist, see Microsoft.Common.targets.
 	<Target Name="BeforeBuild">

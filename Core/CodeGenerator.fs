@@ -4,6 +4,7 @@ namespace Tim.Lisp.Core
 open System
 open System.Reflection
 open System.Reflection.Emit
+open ILBlockModule
 open MaybeBuilder
 
 module CodeGenerator =
@@ -13,7 +14,7 @@ module CodeGenerator =
 
     let rec insertPrimitives = 
         function
-        | List (Atom "+" :: args) -> ListPrimitive (Add, args |> List.map insertPrimitives)
+        | List (Atom "+" :: args) -> ListPrimitive (ListOp.Add, args |> List.map insertPrimitives)
         | List (Atom "-" :: args) -> ListPrimitive (Subtract, args |> List.map insertPrimitives)
         | List (Atom "*" :: args) -> ListPrimitive (Multiply, args |> List.map insertPrimitives)
         | List (Atom "/" :: args) -> ListPrimitive (Divide, args |> List.map insertPrimitives)
@@ -179,176 +180,248 @@ module CodeGenerator =
         | [ ] -> raise <| Compiler(sprintf "no overload of %s is compatible with %A" a args)
         | firstMatch :: _ -> firstMatch
 
-    let rec compile (generator : ILGenerator) defineMethod =
-        let rec compile' env =
-            let emitIf opCode env thenValue elseValue =
-                let thenLabel = generator.DefineLabel()
-                let endLabel = generator.DefineLabel()
-                generator.Emit(opCode, thenLabel)
-                elseValue |> compile' env |> ignore
-                generator.Emit(OpCodes.Br, endLabel)
-                generator.MarkLabel thenLabel
-                thenValue |> compile' env |> ignore
-                generator.MarkLabel endLabel
+    let rec makeBlock (target : IILTarget) env =
+        function
+        | ArgRef index -> 
+            let block = new ILBlock()        
+            emit block (Ldarg index)
+            env, block, block
 
-            function
-            | ArgRef index -> 
-                generator.Emit(OpCodes.Ldarg, index)
-                env
+        | Atom a -> 
+            a |> ident env |> makeBlock target env
 
-            | Atom a -> 
-                a |> ident env |> compile' env
+        | Bool false ->
+            let block = new ILBlock()
+            emit block Ldc_I4_0
+            env, block, block
 
-            | Bool b -> 
-                generator.Emit (if b then OpCodes.Ldc_I4_1 else OpCodes.Ldc_I4_0)
-                env
+        | Bool true ->
+            let block = new ILBlock() 
+            emit block Ldc_I4_1
+            env, block, block
+            
+        | IfPrimitive (ListPrimitive (Equal, [ a; b ]), thenValue, elseValue) ->
+            let aEnv, aHead, aTail = makeBlock target env a
+            let bEnv, bHead, bTail = makeBlock target aEnv b
+            let _, thenHead, thenTail = makeBlock target bEnv thenValue
+            let _, elseHead, elseTail = makeBlock target bEnv elseValue
+            let endBlock = new ILBlock()
+            aTail.Branch <- Br bHead
+            bTail.Branch <- Beq (thenHead, elseHead)
+            thenTail.Branch <- Br endBlock
+            elseTail.Branch <- Br endBlock
+            bEnv, aHead, endBlock
 
-            | IfPrimitive (ListPrimitive (Equal, [ a; b ]), thenValue, elseValue) ->
-                let env' = a |> compile' env
-                let env'' = b |> compile' env'
-                emitIf OpCodes.Beq env'' thenValue elseValue
-                env''
+        | IfPrimitive (testValue, thenValue, elseValue) ->
+            let testEnv, testHead, testTail = makeBlock target env testValue
+            let _, thenHead, thenTail = makeBlock target testEnv thenValue
+            let _, elseHead, elseTail = makeBlock target testEnv elseValue
+            let endBlock = new ILBlock()
+            testTail.Branch <- Brtrue (thenHead, elseHead)
+            thenTail.Branch <- Br endBlock
+            elseTail.Branch <- Br endBlock
+            testEnv, testHead, endBlock
 
-            | IfPrimitive (testValue, thenValue, elseValue) ->
-                let env' = testValue |> compile' env
-                emitIf OpCodes.Brtrue env' thenValue elseValue
-                env'
+        | LambdaDef _ -> 
+            raise <| new NotImplementedException("didn't expect lambda outside variable")
 
-            | LambdaDef _ -> 
-                raise <| new NotImplementedException("didn't expect lambda outside variable")
+        | LambdaRef _ -> 
+            raise <| Compiler("can't compile lambda - try invoking it instead")
 
-            | LambdaRef _ -> 
-                raise <| Compiler("can't compile lambda - try invoking it instead")
+        | List (Atom a :: args) ->
+            match lambdaIdent args env a with
+            | LambdaRef (methodInfo, isParamArray, parameterTypes) -> 
+                let emitBoxed (expectedType : #Type) env x =
+                    let valueEnv, valueHead, valueTail = makeBlock target env x
+                    match typeOf env x with
+                    | a when not expectedType.IsValueType && a.IsValueType -> 
+                        let boxBlock = new ILBlock()
+                        emit boxBlock (Box a)
+                        valueTail.Branch <- Br boxBlock
+                        valueEnv, valueHead, boxBlock
 
-            | List (Atom a :: args) ->
-                match lambdaIdent args env a with
-                | LambdaRef (methodInfo, isParamArray, parameterTypes) -> 
-                    let emitBoxed (expectedType : #Type) env x =
-                        let env' = compile' env x
-                        match typeOf env x with
-                        | a when not expectedType.IsValueType && a.IsValueType -> 
-                            generator.Emit(OpCodes.Box, a)
+                    | _ ->
+                        valueEnv, valueHead, valueTail
 
-                        | _ ->
-                            ()
+                let rec emitArgs (parameterTypes : #Type list) env args =
+                    match args, parameterTypes with
+                    | arg :: otherArgs, [ parameterType ] when isParamArray ->
+                        let elementType = parameterType.GetElementType()
 
-                        env'
+                        let rec emitArrayInit env position =
+                            let block = new ILBlock()
+                            function
+                            | value :: values ->
+                                let boxedEnv, boxedHead, boxedTail = emitBoxed elementType env value
+                                let stelemBlock = new ILBlock()
+                                
+                                emit block Dup
+                                emit block (Ldc_I4 position)
+                                emit stelemBlock (Stelem elementType)
 
-                    let rec emitArgs (parameterTypes : #Type list) env args =
-                        match args, parameterTypes with
-                        | arg :: otherArgs, [ parameterType ] when isParamArray ->
-                            let elementType = parameterType.GetElementType()
+                                block.Branch <- Br boxedHead
+                                boxedTail.Branch <- Br stelemBlock
 
-                            let rec emitArrayInit env position =
-                                function
-                                | value :: values ->
-                                    generator.Emit(OpCodes.Dup)
-                                    generator.Emit(OpCodes.Ldc_I4, int position)
-                                    let env' = emitBoxed elementType env value
-                                    generator.Emit(OpCodes.Stelem, elementType)
-                                    emitArrayInit env' (position + 1) values
+                                let valuesEnv, valuesHead, valuesTail = emitArrayInit boxedEnv (position + 1) values
+                                stelemBlock.Branch <- Br valuesHead
+                                valuesEnv, block, valuesTail
 
-                                | [ ] -> 
-                                    env
+                            | [ ] -> 
+                                env, block, block
 
-                            generator.Emit(OpCodes.Ldc_I4, List.length args)
-                            generator.Emit(OpCodes.Newarr, elementType)
-                            emitArrayInit env 0 args
+                        let newarrBlock = new ILBlock()
+                        let initEnv, initHead, initTail = emitArrayInit env 0 args
 
-                        | arg :: otherArgs, parameterType :: otherParameterTypes ->
-                            emitArgs otherParameterTypes (emitBoxed parameterType env arg) otherArgs
+                        emit newarrBlock (Ldc_I4 <| List.length args)
+                        emit newarrBlock (Newarr elementType)
 
-                        | [ ], [ ] -> 
-                            env
+                        newarrBlock.Branch <- Br initHead
+                        initEnv, newarrBlock, initTail
 
-                        | _ :: _, [ ] -> 
-                            raise <| new InvalidOperationException(sprintf "got %d too many args" <| List.length args)
+                    | arg :: otherArgs, parameterType :: otherParameterTypes ->
+                        let boxedEnv, boxedHead, boxedTail = emitBoxed parameterType env arg
+                        let otherArgsEnv, otherArgsHead, otherArgsTail = emitArgs otherParameterTypes boxedEnv otherArgs
+                        boxedTail.Branch <- Br otherArgsHead
+                        otherArgsEnv, boxedHead, otherArgsTail
 
-                        | [ ], _ :: _ -> 
-                            raise <| new InvalidOperationException(sprintf "got %d too few args" <| List.length parameterTypes)
+                    | [ ], [ ] -> 
+                        let block = new ILBlock()
+                        env, block, block
 
-                    let env' = args |> emitArgs parameterTypes env
-                    generator.Emit(OpCodes.Call, methodInfo)
-                    env'
+                    | _ :: _, [ ] -> 
+                        raise <| new InvalidOperationException(sprintf "got %d too many args" <| List.length args)
 
-                | v -> raise <| new NotImplementedException(sprintf "can't invoke variable %A" v)
+                    | [ ], _ :: _ -> 
+                        raise <| new InvalidOperationException(sprintf "got %d too few args" <| List.length parameterTypes)
 
-            | List (fn :: args) -> 
-                raise <| new NotImplementedException(sprintf "can't invoke value %A" fn)
+                let argsEnv, argsHead, argsTail = emitArgs parameterTypes env args
+                let callBlock = new ILBlock()
 
-            | List [ ] -> 
-                raise <| Compiler("can't invoke empty list")
+                emit callBlock (Call methodInfo)
 
-            | ListPrimitive (op, args) -> 
-                match args with
-                | arg :: otherArgs ->
-                    let opCode = 
-                        match op with
-                        | Add -> OpCodes.Add
-                        | Subtract -> OpCodes.Sub
-                        | Multiply -> OpCodes.Mul
-                        | Divide -> OpCodes.Div
-                        | Equal -> OpCodes.Ceq
+                argsTail.Branch <- Br callBlock
+                argsEnv, argsHead, callBlock
 
-                    let coerceToInt env x = 
-                        let env' = compile' env x
-                        match typeOf env x with
-                        | t when t = typeof<obj> -> generator.Emit(OpCodes.Call, typeof<Convert>.GetMethod("ToInt32", [| typeof<obj> |]))
-                        | t when t = typeof<int> -> ()
-                        | t -> raise <| new NotImplementedException("expected int, got " + t.Name)
-                        env'
+            | v -> raise <| new NotImplementedException(sprintf "can't invoke variable %A" v)
 
-                    let emitBinaryOp env arg =
-                        let env' = coerceToInt env arg
-                        generator.Emit opCode
-                        env'
+        | List (fn :: args) -> 
+            raise <| new NotImplementedException(sprintf "can't invoke value %A" fn)
 
-                    let env' = coerceToInt env arg
-                    otherArgs |> List.fold emitBinaryOp env'
+        | List [ ] -> 
+            raise <| Compiler("can't invoke empty list")
 
-                | l -> 
-                    raise <| Compiler(sprintf "cannot compile list %A" l)
+        | ListPrimitive (op, args) -> 
+            match args with
+            | arg :: otherArgs ->
+                let opCode = 
+                    match op with
+                    | ListOp.Add -> Add
+                    | Subtract -> Sub
+                    | Multiply -> Mul
+                    | Divide -> Div
+                    | Equal -> Ceq
 
-            | Number n -> 
-                generator.Emit(OpCodes.Ldc_I4, n)
-                env
+                let coerceToInt env x = 
+                    let valueEnv, valueHead, valueTail = makeBlock target env x
+                    match typeOf env x with
+                    | t when t = typeof<obj> -> 
+                        let coerceBlock = new ILBlock()
+                        emit coerceBlock (Call <| typeof<Convert>.GetMethod("ToInt32", [| typeof<obj> |]))
+                        valueTail.Branch <- Br coerceBlock
+                        valueEnv, valueHead, coerceBlock
 
-            | String s -> 
-                generator.Emit(OpCodes.Ldstr, s)
-                env
+                    | t when t = typeof<int> -> 
+                        valueEnv, valueHead, valueTail
 
-            | VariableDef (name, value) ->
-                match value with
-                | LambdaDef (paramNames, body) ->
-                    let (lambdaInfo, lambdaGenerator) = 
-                        defineMethod
-                            name
-                            (typeOf env body)
-                            (List.replicate (List.length paramNames) (typeof<int>))
+                    | t -> 
+                        raise <| new NotImplementedException("expected int, got " + t.Name)
 
-                    let envWithLambda = 
-                        env 
-                        |> (LambdaRef (lambdaInfo, false, (List.map (fun _ -> typeof<int>) paramNames)) 
-                            |> Map.add name)
+                let rec emitBinaryOps env args =
+                    match args with
+                    | arg :: otherArgs ->
+                        let valueEnv, valueHead, valueTail = coerceToInt env arg
+                        let otherValuesEnv, otherValuesHead, otherValuesTail = emitBinaryOps valueEnv otherArgs
+                        let opCodeBlock = new ILBlock()
 
-                    let (envWithLambdaArgs, _) = 
-                        paramNames 
-                        |> ((envWithLambda, 0) 
-                            |> List.fold (fun (env, index) name -> (Map.add name (ArgRef index) env, index + 1)))
+                        emit opCodeBlock opCode
 
-                    body |> compile lambdaGenerator defineMethod envWithLambdaArgs |> ignore
-                    lambdaGenerator.Emit(OpCodes.Ret)
-                    envWithLambda
+                        valueTail.Branch <- Br opCodeBlock
+                        opCodeBlock.Branch <- Br otherValuesHead
+                        otherValuesEnv, valueHead, otherValuesTail
 
-                | _ ->
-                    let local = generator.DeclareLocal(typeOf env value)
-                    let envWithVariable = Map.add name (VariableRef local) env
-                    compile' envWithVariable value |> ignore
-                    generator.Emit(OpCodes.Stloc, local)
-                    envWithVariable
+                    | [ ] ->
+                        let block = new ILBlock()
+                        env, block, block
 
-            | VariableRef local -> 
-                generator.Emit(OpCodes.Ldloc, local)
-                env
+                let valueEnv, valueHead, valueTail = coerceToInt env arg
+                let otherValuesEnv, otherValuesHead, otherValuesTail = emitBinaryOps valueEnv otherArgs
+                valueTail.Branch <- Br otherValuesHead
+                otherValuesEnv, valueHead, otherValuesTail
 
-        compile'
+            | l -> 
+                raise <| Compiler(sprintf "cannot compile list %A" l)
+
+        | Number n -> 
+            let block = new ILBlock()
+            emit block (Ldc_I4 n)
+            env, block, block
+
+        | String s -> 
+            let block = new ILBlock()
+            emit block (Ldstr s)
+            env, block, block
+
+        | VariableDef (name, value) ->
+            match value with
+            | LambdaDef (paramNames, body) ->
+                let lambdaTarget =
+                    target.DefineMethod
+                        name
+                        (typeOf env body)
+                        (List.replicate (List.length paramNames) (typeof<int>))
+
+                let lambdaInfo = lambdaTarget.MethodInfo
+
+                let envWithLambda = 
+                    env 
+                    |> (LambdaRef (lambdaInfo, false, (List.map (fun _ -> typeof<int>) paramNames)) 
+                        |> Map.add name)
+
+                let (envWithLambdaArgs, _) = 
+                    paramNames 
+                    |> ((envWithLambda, 0) 
+                        |> List.fold (fun (env, index) name -> (Map.add name (ArgRef index) env, index + 1)))
+
+                let _, bodyHead, bodyTail = makeBlock lambdaTarget envWithLambdaArgs body
+                bodyTail.Branch <- Ret
+                lambdaTarget.GenerateIL bodyHead
+                
+                let block = new ILBlock()
+                envWithLambda, block, block
+
+            | _ ->
+                let block = new ILBlock()
+                let local = target.DeclareLocal(typeOf env value)
+                let envWithVariable = Map.add name (VariableRef local) env
+                let _, variableHead, variableTail = makeBlock target envWithVariable value
+
+                emit block (Stloc local)
+                variableHead.Branch <- Br block
+
+                envWithVariable, variableHead, block
+
+        | VariableRef local -> 
+            let block = new ILBlock()
+            emit block (Ldloc local)
+            env, block, block
+
+    and compile target env =
+        function
+        | value :: otherValues ->
+            let valueEnv, valueHead, valueTail = value |> insertPrimitives |> makeBlock target env
+            let otherValuesEnv, otherValuesHead, otherValuesTail = compile target valueEnv otherValues
+            valueTail.Branch <- Br otherValuesHead
+            otherValuesEnv, valueHead, otherValuesTail
+        | [ ] ->
+            let block = new ILBlock()
+            env, block, block
