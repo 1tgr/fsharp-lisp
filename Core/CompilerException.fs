@@ -1,4 +1,6 @@
 ﻿#light
 namespace Tim.Lisp.Core
+open System
 
-exception Compiler of string
+type CompilerException(message) = 
+    inherit Exception(message)

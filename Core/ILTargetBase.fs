@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.Reflection
 open System.Reflection.Emit
+open ILBlock
 
 [<AbstractClass>]
 type ILTargetBase(generator : ILGenerator, methodInfo : MethodInfo) =
@@ -24,13 +25,13 @@ type ILTargetBase(generator : ILGenerator, methodInfo : MethodInfo) =
         | Ret -> 
             [ ]
 
-    let rec visitBlocks (visitedBlocks : Dictionary<ILBlock, bool>) (block : ILBlock) =
+    let rec visitBlocks (visitedBlocks : Dictionary<ILBlock, bool>) ({ Branch = branch } as block) =
         if visitedBlocks.ContainsKey(block)
         then [ ]
         else
             visitedBlocks.Add(block, true)
             let otherBlocks = 
-                block.Branch
+                branch
                 |> targets
                 |> List.collect (visitBlocks visitedBlocks)
 
@@ -67,6 +68,25 @@ type ILTargetBase(generator : ILGenerator, methodInfo : MethodInfo) =
         | Stloc local -> generator.Emit(OpCodes.Stloc, local)
         | Sub -> generator.Emit(OpCodes.Sub)
 
+    let rec emitInstructions block = 
+        let isRetBlock =
+            match block with
+            | { Branch = Ret } -> true
+            | { Branch = Br { Instructions = [ ]; Branch = Ret } } -> true
+            | _ -> false
+
+        function
+        | [ Call _ as instruction ] when isRetBlock ->
+            generator.Emit(OpCodes.Tailcall)
+            emitInstruction instruction
+
+        | instruction :: otherInstructions ->
+            emitInstruction instruction
+            emitInstructions block otherInstructions
+
+        | [ ] ->
+            ()
+
     let emitBranch (labels : Dictionary<ILBlock, Label>) =
         function
         | Beq (equalBlock, notEqualBlock) ->
@@ -88,18 +108,17 @@ type ILTargetBase(generator : ILGenerator, methodInfo : MethodInfo) =
 
     let rec emitBlocks (labels : Dictionary<ILBlock, Label>) =
         function
-        | block :: otherBlocks ->
+        | { Instructions = instructions; Branch = branch } as block :: otherBlocks ->
             let label = labels.[block]
             generator.MarkLabel(label)
 
-            block.Instructions
-            |> List.iter emitInstruction
+            emitInstructions block instructions
 
-            match block.Branch, otherBlocks with
+            match branch, otherBlocks with
             | Br target, next :: _ when target = next ->
                 ()
 
-            | Br target, _ when target.Branch = Ret && target.Instructions = [ ] ->
+            | Br { Instructions = [ ]; Branch = Ret }, _->
                 generator.Emit(OpCodes.Ret)
 
             | Beq (equalTarget, notEqualTarget), next :: _ when equalTarget = next ->
@@ -108,8 +127,8 @@ type ILTargetBase(generator : ILGenerator, methodInfo : MethodInfo) =
             | Beq (equalTarget, notEqualTarget), next :: _ when notEqualTarget = next ->
                 generator.Emit(OpCodes.Beq, labels.[equalTarget])
 
-            | _ ->
-                emitBranch labels block.Branch
+            | branchOpCode, _ ->
+                emitBranch labels branchOpCode
 
             emitBlocks labels otherBlocks
 

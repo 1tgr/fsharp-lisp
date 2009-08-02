@@ -10,9 +10,16 @@ module Program =
     let main (_ : string array) =
         try
             let code = @"
-(define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))
+(define (countTo total acc)
+  (if (= total acc)
+    acc
+    (countTo total (+ 1 acc))))
+(define (factorial n acc)
+  (if (= n 0)
+    acc
+    (factorial (- n 1) (* acc n))))
 (define number 6)
-(Console.WriteLine (String.Concat ""{0}"" ""{1}"" "" "" ""{2}"" ""{3}"") number ""!"" ""="" (fact number))
+(Console.WriteLine (String.Concat ""{0}"" ""{1}"" "" "" ""{2}"" ""{3}"") number ""!"" ""="" (factorial number 1))
 (Console.WriteLine ""What is your name?"")
 (Console.WriteLine ""Hello, {0}"" (Console.ReadLine))"
 

@@ -4,13 +4,13 @@ namespace Tim.Lisp.Core
 open System
 open System.Reflection
 open System.Reflection.Emit
-open ILBlockModule
+open ILBlock
 open MaybeBuilder
 
 module CodeGenerator =
     let extractAtom = function
         | Atom a -> a
-        | v -> raise <| Compiler(sprintf "expected atom, got %A" v)
+        | v -> raise <| CompilerException(sprintf "expected atom, got %A" v)
 
     let rec insertPrimitives = 
         function
@@ -28,7 +28,7 @@ module CodeGenerator =
                 VariableDef (name, LambdaDef (names |> List.map extractAtom, insertPrimitives body))
 
             | _ -> 
-                raise <| Compiler "expected define name value"
+                raise <| CompilerException "expected define name value"
 
         | List (Atom "if" :: args) ->
             match args with
@@ -36,7 +36,7 @@ module CodeGenerator =
                 IfPrimitive (insertPrimitives testValue, insertPrimitives thenValue, insertPrimitives elseValue)
 
             | _ -> 
-                raise <| Compiler "expected three items for if"
+                raise <| CompilerException "expected three items for if"
 
         | List (Atom "lambda" :: args) ->
             match args with
@@ -44,7 +44,7 @@ module CodeGenerator =
                 LambdaDef (names |> List.map extractAtom, insertPrimitives body)
 
             | _ -> 
-                raise <| Compiler "expected lambda names body"
+                raise <| CompilerException "expected lambda names body"
 
         | List l -> 
             l |> List.map insertPrimitives |> List
@@ -63,7 +63,7 @@ module CodeGenerator =
     let ident env (a : string) =
         match Map.tryFind a env with
         | Some v -> v
-        | None -> raise <| Compiler(sprintf "undeclared identifier %s" a)
+        | None -> raise <| CompilerException(sprintf "undeclared identifier %s" a)
 
     let isParamArray (parameterInfo : #ParameterInfo) = parameterInfo.IsDefined(typeof<ParamArrayAttribute>, true)
     let makeLambdaRef (methodInfo : #MethodInfo) =
@@ -79,18 +79,28 @@ module CodeGenerator =
         | IfPrimitive (_, thenValue, elseValue) ->
             match typeOf env thenValue with
             | t when t = typeOf env elseValue -> t
-            | _ -> raise <| Compiler("expected 'then' and 'else' branches to have same type")
+            | _ -> raise <| CompilerException("expected 'then' and 'else' branches to have same type")
 
         | LambdaDef (_, body) -> typeOf env body
         | LambdaRef (methodBuilder, _, _) -> methodBuilder.ReturnType
         | List (Atom a :: args) -> a |> lambdaIdent args env |> typeOf env
-        | List (fn :: _) -> raise <| Compiler(sprintf "can't invoke %A" fn)
-        | List [ ] -> raise <| Compiler("can't compile empty list")
+        | List (fn :: _) -> raise <| CompilerException(sprintf "can't invoke %A" fn)
+        | List [ ] -> raise <| CompilerException("can't compile empty list")
         | ListPrimitive _ -> typeof<int>
         | Number _ -> typeof<int>
         | String _ -> typeof<string>
         | VariableDef _ -> typeof<Void>
         | VariableRef local -> local.LocalType
+
+    and returnType env code = 
+        let rec tryLast = function
+            | [ item ] -> Some item
+            | item :: items -> tryLast items
+            | [ ] -> None
+
+        match code |> tryLast with
+        | Some value -> typeOf env value
+        | None -> typeof<Void>
 
     and lambdaIdent args env (a : string) =
         let envMatches = 
@@ -172,32 +182,40 @@ module CodeGenerator =
 
         let candidates = List.append envMatches clrMatches
         match candidates with
-        | [ ] -> raise <| Compiler(sprintf "no method called %s" a)
+        | [ ] -> raise <| CompilerException(sprintf "no method called %s" a)
         | _ -> ()
 
         let allMatches = List.filter argsMatchParameters candidates
         match allMatches with
-        | [ ] -> raise <| Compiler(sprintf "no overload of %s is compatible with %A" a args)
+        | [ ] -> raise <| CompilerException(sprintf "no overload of %s is compatible with %A" a args)
         | firstMatch :: _ -> firstMatch
+
+    let rec foldBlocks func state =
+        function
+        | value :: otherValues ->
+            let valueState, valueHead, (valueTail : ILBlock) = func state value
+            let otherValuesState, otherValuesHead, otherValuesTail = foldBlocks func valueState otherValues
+            valueTail |> br otherValuesHead
+            otherValuesState, valueHead, otherValuesTail
+        | [ ] ->
+            let block = empty ()
+            state, block, block
 
     let rec makeBlock (target : IILTarget) env =
         function
         | ArgRef index -> 
-            let block = new ILBlock()        
-            emit block (Ldarg index)
+            let block = emit [ Ldarg index ]
             env, block, block
 
         | Atom a -> 
             a |> ident env |> makeBlock target env
 
         | Bool false ->
-            let block = new ILBlock()
-            emit block Ldc_I4_0
+            let block = emit [ Ldc_I4_0 ]
             env, block, block
 
         | Bool true ->
-            let block = new ILBlock() 
-            emit block Ldc_I4_1
+            let block = emit [ Ldc_I4_1 ]
             env, block, block
             
         | IfPrimitive (ListPrimitive (Equal, [ a; b ]), thenValue, elseValue) ->
@@ -205,28 +223,28 @@ module CodeGenerator =
             let bEnv, bHead, bTail = makeBlock target aEnv b
             let _, thenHead, thenTail = makeBlock target bEnv thenValue
             let _, elseHead, elseTail = makeBlock target bEnv elseValue
-            let endBlock = new ILBlock()
-            aTail.Branch <- Br bHead
-            bTail.Branch <- Beq (thenHead, elseHead)
-            thenTail.Branch <- Br endBlock
-            elseTail.Branch <- Br endBlock
+            let endBlock = empty ()
+            aTail |> br bHead
+            bTail |> beq thenHead elseHead
+            thenTail |> br endBlock
+            elseTail |> br endBlock
             bEnv, aHead, endBlock
 
         | IfPrimitive (testValue, thenValue, elseValue) ->
             let testEnv, testHead, testTail = makeBlock target env testValue
             let _, thenHead, thenTail = makeBlock target testEnv thenValue
             let _, elseHead, elseTail = makeBlock target testEnv elseValue
-            let endBlock = new ILBlock()
-            testTail.Branch <- Brtrue (thenHead, elseHead)
-            thenTail.Branch <- Br endBlock
-            elseTail.Branch <- Br endBlock
+            let endBlock = empty ()
+            testTail |> brtrue thenHead elseHead
+            thenTail |> br endBlock
+            elseTail |> br endBlock
             testEnv, testHead, endBlock
 
         | LambdaDef _ -> 
             raise <| new NotImplementedException("didn't expect lambda outside variable")
 
         | LambdaRef _ -> 
-            raise <| Compiler("can't compile lambda - try invoking it instead")
+            raise <| CompilerException("can't compile lambda - try invoking it instead")
 
         | List (Atom a :: args) ->
             match lambdaIdent args env a with
@@ -235,9 +253,8 @@ module CodeGenerator =
                     let valueEnv, valueHead, valueTail = makeBlock target env x
                     match typeOf env x with
                     | a when not expectedType.IsValueType && a.IsValueType -> 
-                        let boxBlock = new ILBlock()
-                        emit boxBlock (Box a)
-                        valueTail.Branch <- Br boxBlock
+                        let boxBlock = emit [ Box a ]
+                        valueTail |> br boxBlock
                         valueEnv, valueHead, boxBlock
 
                     | _ ->
@@ -249,43 +266,36 @@ module CodeGenerator =
                         let elementType = parameterType.GetElementType()
 
                         let rec emitArrayInit env position =
-                            let block = new ILBlock()
                             function
                             | value :: values ->
                                 let boxedEnv, boxedHead, boxedTail = emitBoxed elementType env value
-                                let stelemBlock = new ILBlock()
-                                
-                                emit block Dup
-                                emit block (Ldc_I4 position)
-                                emit stelemBlock (Stelem elementType)
+                                let block = emit [ Dup; Ldc_I4 position ]
+                                let stelemBlock = emit [ Stelem elementType ]
 
-                                block.Branch <- Br boxedHead
-                                boxedTail.Branch <- Br stelemBlock
+                                block |> br boxedHead
+                                boxedTail |> br stelemBlock
 
                                 let valuesEnv, valuesHead, valuesTail = emitArrayInit boxedEnv (position + 1) values
-                                stelemBlock.Branch <- Br valuesHead
+                                stelemBlock |> br valuesHead
                                 valuesEnv, block, valuesTail
 
                             | [ ] -> 
+                                let block = empty ()
                                 env, block, block
 
-                        let newarrBlock = new ILBlock()
                         let initEnv, initHead, initTail = emitArrayInit env 0 args
-
-                        emit newarrBlock (Ldc_I4 <| List.length args)
-                        emit newarrBlock (Newarr elementType)
-
-                        newarrBlock.Branch <- Br initHead
+                        let newarrBlock = emit [ Ldc_I4 <| List.length args; Newarr elementType ]
+                        newarrBlock |> br initHead
                         initEnv, newarrBlock, initTail
 
                     | arg :: otherArgs, parameterType :: otherParameterTypes ->
                         let boxedEnv, boxedHead, boxedTail = emitBoxed parameterType env arg
                         let otherArgsEnv, otherArgsHead, otherArgsTail = emitArgs otherParameterTypes boxedEnv otherArgs
-                        boxedTail.Branch <- Br otherArgsHead
+                        boxedTail |> br otherArgsHead
                         otherArgsEnv, boxedHead, otherArgsTail
 
                     | [ ], [ ] -> 
-                        let block = new ILBlock()
+                        let block = empty ()
                         env, block, block
 
                     | _ :: _, [ ] -> 
@@ -295,11 +305,8 @@ module CodeGenerator =
                         raise <| new InvalidOperationException(sprintf "got %d too few args" <| List.length parameterTypes)
 
                 let argsEnv, argsHead, argsTail = emitArgs parameterTypes env args
-                let callBlock = new ILBlock()
-
-                emit callBlock (Call methodInfo)
-
-                argsTail.Branch <- Br callBlock
+                let callBlock = emit [ Call methodInfo ]
+                argsTail |> br callBlock
                 argsEnv, argsHead, callBlock
 
             | v -> raise <| new NotImplementedException(sprintf "can't invoke variable %A" v)
@@ -308,7 +315,7 @@ module CodeGenerator =
             raise <| new NotImplementedException(sprintf "can't invoke value %A" fn)
 
         | List [ ] -> 
-            raise <| Compiler("can't invoke empty list")
+            raise <| CompilerException("can't invoke empty list")
 
         | ListPrimitive (op, args) -> 
             match args with
@@ -325,9 +332,8 @@ module CodeGenerator =
                     let valueEnv, valueHead, valueTail = makeBlock target env x
                     match typeOf env x with
                     | t when t = typeof<obj> -> 
-                        let coerceBlock = new ILBlock()
-                        emit coerceBlock (Call <| typeof<Convert>.GetMethod("ToInt32", [| typeof<obj> |]))
-                        valueTail.Branch <- Br coerceBlock
+                        let coerceBlock = emit [ Call <| typeof<Convert>.GetMethod("ToInt32", [| typeof<obj> |]) ]
+                        valueTail |> br coerceBlock
                         valueEnv, valueHead, coerceBlock
 
                     | t when t = typeof<int> -> 
@@ -341,43 +347,52 @@ module CodeGenerator =
                     | arg :: otherArgs ->
                         let valueEnv, valueHead, valueTail = coerceToInt env arg
                         let otherValuesEnv, otherValuesHead, otherValuesTail = emitBinaryOps valueEnv otherArgs
-                        let opCodeBlock = new ILBlock()
+                        let opCodeBlock = emit [ opCode ]
 
-                        emit opCodeBlock opCode
-
-                        valueTail.Branch <- Br opCodeBlock
-                        opCodeBlock.Branch <- Br otherValuesHead
+                        valueTail |> br opCodeBlock
+                        opCodeBlock |> br otherValuesHead
                         otherValuesEnv, valueHead, otherValuesTail
 
                     | [ ] ->
-                        let block = new ILBlock()
+                        let block = empty ()
                         env, block, block
 
                 let valueEnv, valueHead, valueTail = coerceToInt env arg
                 let otherValuesEnv, otherValuesHead, otherValuesTail = emitBinaryOps valueEnv otherArgs
-                valueTail.Branch <- Br otherValuesHead
+                valueTail |> br otherValuesHead
                 otherValuesEnv, valueHead, otherValuesTail
 
             | l -> 
-                raise <| Compiler(sprintf "cannot compile list %A" l)
+                raise <| CompilerException(sprintf "cannot compile list %A" l)
 
         | Number n -> 
-            let block = new ILBlock()
-            emit block (Ldc_I4 n)
+            let block = emit [ Ldc_I4 n ]
             env, block, block
 
         | String s -> 
-            let block = new ILBlock()
-            emit block (Ldstr s)
+            let block = emit [ Ldstr s] 
             env, block, block
 
         | VariableDef (name, value) ->
             match value with
             | LambdaDef (paramNames, body) ->
+                (*
+                 * typeof<int> is a hack to get recursive functions to compile.
+                 *  At this point in the compilation we don't have an env that contains 
+                 *  lambda, so if the lambda tail calls, we can't determine its return type.
+                 *
+                 * Possible fixes:
+                 *  - Change LambdaRef and Call so that they no longer use a MethodInfo. 
+                 *      Then generate the .NET method for the lambda after 
+                 *      its ILBlock has been constructed.
+                 *  - Type inference: the types of all values possibly returned by the lambda
+                 *      must match. There will be some base case where a recursive lambda returns
+                 *      a known type (e.g. factorial eventually returns 1)
+                 *)
                 let lambdaTarget =
                     target.DefineMethod
                         name
-                        (typeOf env body)
+                        typeof<int>
                         (List.replicate (List.length paramNames) (typeof<int>))
 
                 let lambdaInfo = lambdaTarget.MethodInfo
@@ -393,35 +408,26 @@ module CodeGenerator =
                         |> List.fold (fun (env, index) name -> (Map.add name (ArgRef index) env, index + 1)))
 
                 let _, bodyHead, bodyTail = makeBlock lambdaTarget envWithLambdaArgs body
-                bodyTail.Branch <- Ret
+                bodyTail |> ret
                 lambdaTarget.GenerateIL bodyHead
-                
-                let block = new ILBlock()
+
+                let block = empty ()
                 envWithLambda, block, block
 
             | _ ->
-                let block = new ILBlock()
                 let local = target.DeclareLocal(typeOf env value)
                 let envWithVariable = Map.add name (VariableRef local) env
                 let _, variableHead, variableTail = makeBlock target envWithVariable value
 
-                emit block (Stloc local)
-                variableHead.Branch <- Br block
+                let block = emit [ Stloc local ]
+                variableHead |> br block
 
                 envWithVariable, variableHead, block
 
         | VariableRef local -> 
-            let block = new ILBlock()
-            emit block (Ldloc local)
+            let block = emit [ Ldloc local ]
             env, block, block
 
-    and compile target env =
-        function
-        | value :: otherValues ->
-            let valueEnv, valueHead, valueTail = value |> insertPrimitives |> makeBlock target env
-            let otherValuesEnv, otherValuesHead, otherValuesTail = compile target valueEnv otherValues
-            valueTail.Branch <- Br otherValuesHead
-            otherValuesEnv, valueHead, otherValuesTail
-        | [ ] ->
-            let block = new ILBlock()
-            env, block, block
+    let compile target env = 
+        let func env = insertPrimitives >> makeBlock target env
+        foldBlocks func env

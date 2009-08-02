@@ -11,7 +11,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Core.UnitTests", "Core.Unit
 EndProject
 Global
 	GlobalSection(SourceCodeControl) = preSolution
-		SccNumberOfProjects = 4
+		SccNumberOfProjects = 5
 		SccLocalPath0 = .
 		SccProjectUniqueName1 = Core\\Core.fsproj
 		SccLocalPath1 = Core
@@ -20,6 +20,8 @@ Global
 		SccProjectUniqueName3 = Interactive\\Interactive.csproj
 		SccLocalPath3 = .
 		SccProjectFilePathRelativizedFromConnection3 = Interactive\\
+		SccProjectUniqueName4 = Core.UnitTests\\Core.UnitTests.fsproj
+		SccLocalPath4 = Core.UnitTests
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

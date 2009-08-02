@@ -3,6 +3,7 @@ namespace Tim.Lisp.Core
 open System
 open System.Reflection
 open System.Reflection.Emit
+open ILBlock
 
 type IILTarget =
     abstract DefineMethod : string -> Type -> Type list -> IILTarget

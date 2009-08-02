@@ -2,29 +2,40 @@
 namespace Tim.Lisp.Core
 open System
 
-type ILBranchOpCode =
-                    | Beq of ILBlock * ILBlock
-                    | Br of ILBlock
-                    | Brtrue of ILBlock * ILBlock
-                    | NoBranch
-                    | Ret
+module ILBlock =
+    type ILBranchOpCode =
+                        | Beq of ILBlock * ILBlock
+                        | Br of ILBlock
+                        | Brtrue of ILBlock * ILBlock
+                        | NoBranch
+                        | Ret
 
-and ILBlock() =
-    let mutable instructions : ILOpCode list = List.empty
-    let mutable branch = NoBranch
+    and ILBlock = 
+        {
+            Instructions : ILOpCode list;
+            mutable Branch : ILBranchOpCode
+        }
 
-    member this.Emit opCode = 
-        instructions <- opCode :: instructions
+    let emit instructions =
+        { Instructions = instructions; Branch = NoBranch }
 
-    member this.Instructions
-        with get() = List.rev instructions
+    let empty () = emit [ ]
 
-    member this.Branch
-        with get() = branch
-        and set(value) = 
-            match branch with
-            | NoBranch -> branch <- value
-            | _ -> raise <| new InvalidOperationException("Can only set Branch once.")
+    let goto branch block =
+        match block with
+        | { Branch = NoBranch } ->
+            block.Branch <- branch
 
-module ILBlockModule =
-    let emit (block : ILBlock) opCode = block.Emit opCode
+        | _ -> raise <| InvalidOperationException("Can only change a block's branch once.")
+
+    let beq equalBlock notEqualBlock = 
+        goto (Beq (equalBlock, notEqualBlock))
+
+    let br block = 
+        goto (Br block)
+
+    let brtrue trueBlock falseBlock = 
+        goto (Brtrue (trueBlock, falseBlock))
+
+    let ret =
+        goto Ret

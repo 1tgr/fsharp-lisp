@@ -5,30 +5,24 @@ open System
 open System.IO
 open System.Reflection
 open System.Reflection.Emit
-open ILBlockModule
+open ILBlock
 
 module Compiler =
     let compile expectedReturnType target code =
-        let rec tryLast = function
-            | [ item ] -> Some item
-            | item :: items -> tryLast items
-            | [ ] -> None
-
         let env, head, tail = code |> CodeGenerator.compile target Map.empty
-        let epilogBlock = new ILBlock()
 
-        let returnType = 
-            match code |> tryLast with
-            | Some value -> CodeGenerator.typeOf env value
-            | None -> typeof<Void>
+        let returnType = CodeGenerator.returnType env code
+        let epilogInstructions =
+            if expectedReturnType = typeof<Void> && returnType <> typeof<Void> then
+                [ Pop ]
+            else if (not expectedReturnType.IsValueType) && returnType.IsValueType then
+                [ Box returnType ] 
+            else
+                [ ]
 
-        if expectedReturnType = typeof<Void> && returnType <> typeof<Void> then
-            emit epilogBlock Pop
-        else if (not expectedReturnType.IsValueType) && returnType.IsValueType then
-            emit epilogBlock (Box returnType)
-
-        tail.Branch <- Br epilogBlock
-        epilogBlock.Branch <- Ret
+        let epilog = emit epilogInstructions
+        tail |> br epilog
+        epilog |> ret
         target.GenerateIL head
 
     let compileToDelegate (delegateType : #Type) code =
