@@ -10,19 +10,6 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Core.UnitTests", "Core.UnitTests\Core.UnitTests.fsproj", "{04DA2950-6598-4B9D-879C-7C6A8440279A}"
 EndProject
 Global
-	GlobalSection(SourceCodeControl) = preSolution
-		SccNumberOfProjects = 5
-		SccLocalPath0 = .
-		SccProjectUniqueName1 = Core\\Core.fsproj
-		SccLocalPath1 = Core
-		SccProjectUniqueName2 = Compiler\\Compiler.fsproj
-		SccLocalPath2 = Compiler
-		SccProjectUniqueName3 = Interactive\\Interactive.csproj
-		SccLocalPath3 = .
-		SccProjectFilePathRelativizedFromConnection3 = Interactive\\
-		SccProjectUniqueName4 = Core.UnitTests\\Core.UnitTests.fsproj
-		SccLocalPath4 = Core.UnitTests
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
