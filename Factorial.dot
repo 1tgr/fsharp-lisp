@@ -1,0 +1,156 @@
+/*
+(define (factorial n)
+  (if (= n 0) 
+    1 
+    (* n (factorial (- n 1)))))
+(factorial 6)
+*/
+
+digraph G
+{
+  rankdir = TB
+  fontname = "Arial"
+  fontsize = 12
+  size = "6.7,6.7"
+
+  subgraph cluster_main
+  {
+    penwidth = 0
+    bgcolor = "#dddddd"
+    label = "main function"
+
+    main_1
+    [
+      fontname = "Arial"
+      fontsize = 10
+      shape = "record"
+      label = "{ (define (factorial n))|empty block }"
+      fillcolor = "#ffffff"
+      style = "filled"
+    ]
+
+    main_2
+    [
+      fontname = "Arial"
+      fontsize = 10
+      shape = "record"
+      label = "{ (Console.WriteLine (factorial 6))|ldc.i4 6|call factorial|box Int32|call Console.WriteLine }"
+      fillcolor = "#ffffff"
+      style = "filled"
+    ]
+
+    main_end
+    [
+      fontname = "Arial"
+      fontsize = 10
+      label = "end"
+      fillcolor = "#ffffff"
+      style = "filled"
+    ]
+  }
+
+  subgraph cluster_factorial
+  {
+    penwidth = 0
+    bgcolor = "#dddddd"
+    label = "factorial function"
+
+    factorial_1
+    [
+      fontname = "Arial"
+      fontsize = 10
+      shape = "record"
+      label = "{ (if = n 0)|ldarg 0|ldc.i4 0 }"
+      fillcolor = "#ffffff"
+      style = "filled"
+    ]
+
+    factorial_2
+    [
+      fontname = "Arial"
+      fontsize = 10
+      shape = "record"
+      label = "{ 1|ldc.i4 1 }"
+      fillcolor = "#ffffff"
+      style = "filled"
+    ]
+
+    factorial_3
+    [
+      fontname = "Arial"
+      fontsize = 10
+      shape = "record"
+      label = "{ (* n (factorial (- n 1)))|ldarg 0|ldarg 0|ldc.i4 1|sub|call factorial|mul }"
+      fillcolor = "#ffffff"
+      style = "filled"
+    ]
+
+    factorial_4
+    [
+      fontname = "Arial"
+      fontsize = 10
+      shape = "record"
+      label = "empty block"
+      fillcolor = "#ffffff"
+      style = "filled"
+    ]
+
+    factorial_end
+    [
+      fontname = "Arial"
+      fontsize = 10
+      label = "end"
+      fillcolor = "#ffffff"
+      style = "filled"
+    ]
+  }
+
+  main_1 -> main_2
+  [
+    fontname = "Arial"
+    fontsize = 10
+    label = "br"
+  ]
+
+  main_2 -> main_end
+  [
+    fontname = "Arial"
+    fontsize = 10
+    label = "ret"
+  ]
+
+  factorial_1 -> factorial_2
+  [
+    fontname = "Arial"
+    fontsize = 10
+    label = "beq: then branch"
+  ]
+
+  factorial_1 -> factorial_3
+  [
+    fontname = "Arial"
+    fontsize = 10
+    label = "beq: else branch"
+  ]
+
+  factorial_2 -> factorial_4
+  [
+    fontname = "Arial"
+    fontsize = 10
+    label = "br"
+  ]
+
+  factorial_3 -> factorial_4
+  [
+    fontname = "Arial"
+    fontsize = 10
+    label = "br"
+  ]
+
+  factorial_4 -> factorial_end
+  [
+    fontname = "Arial"
+    fontsize = 10
+    label = "ret"
+  ]
+}
