@@ -3,7 +3,7 @@
   (if (= n 0) 
     1 
     (* n (factorial (- n 1)))))
-(factorial 6)
+(Console.WriteLine (factorial 6))
 */
 
 digraph G
