@@ -17,10 +17,11 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <OutputPath>bin\Debug\</OutputPath>
+    <OutputPath>..\bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>bin\Debug\Core.UnitTests.XML</DocumentationFile>
+    <DocumentationFile>
+    </DocumentationFile>
     <StartAction>Program</StartAction>
     <StartProgram>C:\Git\fsharp-lisp\lib\NUnit-2.5.5.10112\bin\net-2.0\nunit.exe</StartProgram>
     <StartArguments>Tim.Lisp.Core.UnitTests.dll</StartArguments>
@@ -29,10 +30,11 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
-    <OutputPath>bin\Release\</OutputPath>
+    <OutputPath>..\bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>bin\Release\Core.UnitTests.XML</DocumentationFile>
+    <DocumentationFile>
+    </DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
