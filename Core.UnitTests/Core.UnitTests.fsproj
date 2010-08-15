@@ -34,6 +34,9 @@
   <ItemGroup>
     <Reference Include="mscorlib" />
     <Reference Include="FSharp.Core" />
+    <Reference Include="nunit.framework">
+      <HintPath>..\lib\nunit.framework.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
   </ItemGroup>
@@ -46,6 +49,11 @@
     <ProjectReference Include="..\Core\Core.fsproj">
       <Name>Core</Name>
       <Project>{be723fea-19b2-47d8-9760-ecb75c3a7c3f}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\lib\FParsec\Build\VS10\FParsecCS.csproj">
+      <Name>FParsecCS</Name>
+      <Project>{501423c3-8ea5-4e54-8d9c-ef60272b57fa}</Project>
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>
