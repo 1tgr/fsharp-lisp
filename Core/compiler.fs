@@ -65,12 +65,12 @@ module internal CompilerImpl =
 
         addToScope (env, { Body = [] }) exprs
 
-    type ILFunction(typeBuilder : TypeBuilder, name : string, paramNames : string list) =
+    type ILFunction(typeBuilder : TypeBuilder, name : string, returnType : Type, paramNames : string list) =
         let dynamicMethod = 
             typeBuilder.DefineMethod(
                 name, 
                 MethodAttributes.Public ||| MethodAttributes.Static, 
-                typeof<Void>, 
+                returnType, 
                 paramNames |> List.map (fun _ -> typeof<int>) |> Array.ofList)
 
         let generator = dynamicMethod.GetILGenerator()
@@ -78,10 +78,41 @@ module internal CompilerImpl =
         member this.DynamicMethod = dynamicMethod
         member this.Generator = generator
 
+    let rec exprType (env : Env<'a>) (expr : Expr<_>) : Type =
+        match expr with
+        | Atom(_, name) ->
+            match Map.tryFind name env.Values, env.Parent with
+            | Some (Func func), _ -> blockType func.Block
+            | Some (Var expr), _ -> exprType env expr
+            | None, Some parent -> exprType parent expr
+            | None, None -> failwithf "undeclared identifier %s" name
+
+        | Float _ ->
+            typeof<float>
+
+        | Int _ ->
+            typeof<int>
+
+        | List(_, Atom(_, name) :: args) ->
+            failwith "function calls not yet implemented"
+
+        | List _ ->
+            failwith "quotation not yet implemented"
+
+        | String(_, s) ->
+            typeof<string>
+
+    and blockType (block : Block<_>) : Type =
+        match List.rev block.Body with
+        | [] -> typeof<Void>
+        | Block(env, block) :: _ -> blockType block
+        | Expr(env, expr) :: _ -> exprType env expr
+
     let rec makeILFunctionsFromValue (typeBuilder : TypeBuilder) (name : string) (value : EnvValue<'a>) : (ILFunction * Func<'a>) list =
         match value with
         | Func func ->
-            let ilFunc = ILFunction(typeBuilder, name, func.Params)
+            let returnType = blockType func.Block
+            let ilFunc = ILFunction(typeBuilder, name, returnType, func.Params)
             (ilFunc, func) :: List.collect (makeILFunctions typeBuilder) func.Block.Body
 
         | Var _ ->
@@ -99,19 +130,43 @@ module internal CompilerImpl =
             []
 
     let emitFunc (ilFunc : ILFunction) (func : Func<_>) : unit =
-        let emitExpr (expr : Expr<_>) : unit =
-            ()
+        let g = ilFunc.Generator
+
+        let rec emitExpr (env : Env<_>) (expr : Expr<_>) : unit =
+            match expr with
+            | Atom(_, name) ->
+                match Map.tryFind name env.Values, env.Parent with
+                | Some (Func _), _ -> failwith "delegates not yet implemented"
+                | Some (Var expr), _ -> emitExpr env expr
+                | None, Some parent when parent.Func <> env.Func -> failwith "closures not yet implemented"
+                | None, Some parent -> emitExpr parent expr
+                | None, None -> failwithf "undeclared identifier %s" name
+
+            | Float(_, n) ->
+                g.Emit(OpCodes.Ldc_R4, n)
+
+            | Int(_, n) ->
+                g.Emit(OpCodes.Ldc_I4, n)
+
+            | List(_, Atom(_, name) :: args) ->
+                failwith "function calls not yet implemented"
+
+            | List _ ->
+                failwith "quotation not yet implemented"
+
+            | String(_, s) ->
+                g.Emit(OpCodes.Ldstr, s)
 
         let rec emitStmt (stmt : Stmt<_>) : unit =
             match stmt with
             | Block(_, block) ->
                 List.iter emitStmt block.Body
 
-            | Expr(_, expr) ->
-                emitExpr expr
+            | Expr(env, expr) ->
+                emitExpr env expr
 
         List.iter emitStmt func.Block.Body
-        ilFunc.Generator.Emit(OpCodes.Ret)
+        g.Emit(OpCodes.Ret)
 
 open CompilerImpl
 
