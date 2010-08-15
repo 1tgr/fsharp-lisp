@@ -3,37 +3,32 @@ namespace Tim.Lisp.Core
 open System
 open Tim.Lisp.Core.Syntax
 
-module internal List =
-    let singleton value =
-        [value]
-
 module internal CompilerImpl =
-    type Block<'a, 'b> =
-        {
-            Env : Map<string, Expr<unit>>
-            Body : Stmt<'a, 'b> list
-        }
+    type InitEnv = Map<string, Expr<unit>>
 
-    and Stmt<'a, 'b> = Scope of 'a * Block<'a, 'b>
-                     | Stmt of 'a * Expr<'b>
+    type Stmt<'a, 'exprTag> = Scope of 'a * Stmt<'a, 'exprTag> list
+                            | Stmt of 'a * Expr<'exprTag>
 
-    let makeScope (exprs : Expr<'a> list) : Stmt<unit, 'a> =
-        let rec append (appendTo : Block<unit, 'a>) (exprs : Expr<'a> list) : Block<unit, 'a> =
+    let makeScope (exprs : Expr<'a> list) : Stmt<InitEnv, 'a> =
+        let rec addToScope
+            (env   : InitEnv, body : Stmt<InitEnv, 'a> list) 
+            (exprs : Expr<'a> list) 
+                   : InitEnv * Stmt<InitEnv, 'a> list
+            =
             match exprs with
             | List(_, Atom(_, "define") :: values) :: tail ->
                 match values with
                 | [Atom(_, name); value] ->
                     let value = value |> Expr.mapa (fun _ -> ())
 
-                    match appendTo with
-                    | { Env = env; Body = [] } ->
-                        append { appendTo with Env = Map.add name value env } tail
+                    match body with
+                    | [] ->
+                        let oenv, obody = Map.add name value env, []
+                        tail |> addToScope (oenv, obody)
 
-                    | { Body = body } ->
-                        let block = { Env = Map.ofList [(name, value)]
-                                      Body = [] }
-
-                        { appendTo with Body = body @ [Scope((), append block tail)] }
+                    | _ ->
+                        let ienv, ibody = tail |> addToScope (Map.ofList [(name, value)], [])
+                        env, body @ [Scope(ienv, ibody)]
 
                 | List _ :: _ ->
                     failwithf "Functions not yet implemented"
@@ -42,11 +37,15 @@ module internal CompilerImpl =
                     failwithf "define expected 1 value, not %A" values
 
             | head :: tail ->
-                append { appendTo with Body = appendTo.Body @ [Stmt((), head)] } tail
+                let scope = env, body @ [Stmt(env, head)]
+                tail |> addToScope scope
 
-            | [] -> appendTo
+            | [] ->
+                env, body
 
-        Scope((), append { Env = Map.empty; Body = List.empty } exprs)
+        exprs
+        |> addToScope (Map.empty, List.empty)
+        |> Scope
 
     type Local =
         {
@@ -66,40 +65,49 @@ module internal CompilerImpl =
                           InitExpr = initExpr }
             Map.add name (ref local) locals
 
-    let rec allocateLocals (locals : LocalEnv) (stmt : Stmt<unit, 'a>) : Stmt<LocalEnv, 'a> =
+    let rec allocateLocals (locals : LocalEnv) (stmt : Stmt<InitEnv, 'a>) : Stmt<LocalEnv, 'a> =
         match stmt with
-        | Scope((), { Env = env; Body = body }) ->
-            let block = { Env = env
-                          Body = List.map (allocateLocals locals) body }
+        | Scope(initEnv, body) ->
+            let localEnv = initEnv |> Map.fold addToLocals locals
+            let body = body |> List.map (allocateLocals localEnv)
+            Scope(localEnv, body)
 
-            let env = env |> Map.fold addToLocals locals
-            Scope(env, block)
-
-        | Stmt((), expr) ->
+        | Stmt(_, expr) ->
             Stmt(locals, expr)
 
-    let resolveLocal (expr : Expr<'a>) (env : LocalEnv) : Expr<unit> option =
+    let rec resolveLocal (parentEnvs : LocalEnv list) (expr : Expr<'a>) : Expr<'a> =
         match expr with
-        | Atom(_, name) ->
-            match Map.tryFind name env with
-            | Some ref -> Some ((!ref).InitExpr)
-            | None -> None
+        | Atom(a, name) ->
+            match parentEnvs with
+            | head :: tail ->
+                match Map.tryFind name head with
+                | Some ref -> Expr.mapa (fun () -> a) ((!ref).InitExpr)
+                | None -> resolveLocal tail expr
+
+            | [] ->
+                failwithf "%s: undeclared identifier" name
+
+        | List(a, exprs) ->
+            let exprs = exprs |> List.map (resolveLocal parentEnvs)
+            List(a, exprs)
 
         | expr ->
-            Some (expr |> Expr.mapa (fun _ -> ()))
+            expr
 
-    let rec resolveLocals (parentEnvs : LocalEnv list) (stmt : Stmt<LocalEnv, 'a>) : Stmt<unit, unit> =
+    let rec resolveLocals (parentEnvs : LocalEnv list) (stmt : Stmt<LocalEnv, 'a>) : Stmt<unit, 'a> =
         match stmt with
-        | Scope(localEnv, { Env = env; Body = body }) ->
-            let localEnv = localEnv :: parentEnvs
-            let block = { Env = env
-                          Body = List.map (resolveLocals localEnv) body }
-            Scope((), block)
+        | Scope(localEnv, body) ->
+            let body = body |> List.map (resolveLocals (localEnv :: parentEnvs))
+            Scope((), body)
 
         | Stmt(localEnv, expr) ->
-            match List.tryPick (resolveLocal expr) parentEnvs with
-            | Some expr -> Stmt((), expr)
-            | None -> failwithf "Undeclared identifier in %A" expr
+            Stmt((), resolveLocal parentEnvs expr)
+
+    let rec print (indent : int) (stmt : Stmt<_, _>) : string list =
+        let prefix = new string(' ', indent)
+        match stmt with
+        | Scope(_, body) -> (sprintf "%sScope:" prefix) :: (body |> List.collect (print (indent + 1)))
+        | Stmt(_, expr) -> [expr |> sprintf "%s%A" prefix]
 
 module Compiler =
     let compileToDelegate (delegateType : Type) (code : Expr<_> list) : Delegate =
@@ -108,6 +116,7 @@ module Compiler =
             |> CompilerImpl.makeScope
             |> CompilerImpl.allocateLocals Map.empty
             |> CompilerImpl.resolveLocals List.empty
-            |> sprintf "%A"
+            |> CompilerImpl.print 0
+            |> String.concat "\n"
 
-        raise <| NotImplementedException msg
+        raise <| NotImplementedException ("\n" + msg)
