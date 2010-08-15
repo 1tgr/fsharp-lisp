@@ -44,4 +44,4 @@ module Parser =
     let parseString (s : string) : Expr<Position> list =
         match runParserOnString ParserImpl.prog () "<<input>>" s with
         | Success(e, _, _) -> e
-        | Failure(msg, _, _) -> raise <| InvalidOperationException(msg)
+        | Failure(msg, _, _) -> failwith msg

@@ -21,6 +21,9 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>bin\Debug\Core.UnitTests.XML</DocumentationFile>
+    <StartAction>Program</StartAction>
+    <StartProgram>C:\Git\fsharp-lisp\lib\NUnit-2.5.5.10112\bin\net-2.0\nunit.exe</StartProgram>
+    <StartArguments>Tim.Lisp.Core.UnitTests.dll</StartArguments>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
