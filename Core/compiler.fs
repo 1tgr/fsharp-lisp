@@ -8,35 +8,45 @@ module internal List =
         [value]
 
 module internal CompilerImpl =
-    type Env = Map<string, Expr<unit>>
+    type Block<'a, 'b> =
+        {
+            Env : Map<string, Expr<unit>>
+            Body : Stmt<'a, 'b> list
+        }
 
-    let rec addEnvironments (env : Env) (exprs : Expr<'a> list) : Expr<'a * Env> list =
-        match exprs with
-        | List(_, Atom(_, "define") :: values) :: tail ->
-            match values with
-            | [Atom(_, name); value] ->
-                let env = env |> Map.add name (Expr.mapa (fun _ -> ()) value)
-                addEnvironments env tail
+    and Stmt<'a, 'b> = Scope of 'a * Block<'a, 'b>
+                     | Stmt of 'a * Expr<'b>
 
-            | List _ :: _ ->
-                failwithf "Functions not yet implemented"
+    let makeScope (exprs : Expr<'a> list) : Stmt<unit, 'a> =
+        let rec append (appendTo : Block<unit, 'a>) (exprs : Expr<'a> list) : Block<unit, 'a> =
+            match exprs with
+            | List(_, Atom(_, "define") :: values) :: tail ->
+                match values with
+                | [Atom(_, name); value] ->
+                    let value = value |> Expr.mapa (fun _ -> ())
 
-            | _ ->
-                failwithf "define expected 1 value, not %A" values
+                    match appendTo with
+                    | { Env = env; Body = [] } ->
+                        append { appendTo with Env = Map.add name value env } tail
 
-        | head :: tail ->
-            let expr =
-                match head with
-                | List(a, exprs) ->
-                    let exprs = exprs |> List.map (List.singleton >> addEnvironments env >> List.head)
-                    List((a, env), exprs)
+                    | { Body = body } ->
+                        let block = { Env = Map.ofList [(name, value)]
+                                      Body = [] }
 
-                | expr ->
-                    expr |> Expr.mapa (fun a -> (a, env))
+                        { appendTo with Body = body @ [Scope((), append block tail)] }
 
-            expr :: addEnvironments env tail
+                | List _ :: _ ->
+                    failwithf "Functions not yet implemented"
 
-        | [] -> []
+                | _ ->
+                    failwithf "define expected 1 value, not %A" values
+
+            | head :: tail ->
+                append { appendTo with Body = appendTo.Body @ [Stmt((), head)] } tail
+
+            | [] -> appendTo
+
+        Scope((), append { Env = Map.empty; Body = List.empty } exprs)
 
     type Local =
         {
@@ -56,44 +66,48 @@ module internal CompilerImpl =
                           InitExpr = initExpr }
             Map.add name (ref local) locals
 
-    let rec allocateLocals (locals : LocalEnv) (exprs : Expr<'a * Env> list) : Expr<'a * LocalEnv> list =
-        match exprs with
-        | head :: tail ->
-            let expr =
-                match head with
-                | List((a, env), exprs) ->
-                    let locals = env |> Map.fold addToLocals locals
-                    let exprs = exprs |> List.map (List.singleton >> allocateLocals locals >> List.head)
-                    List((a, locals), exprs)
+    let rec allocateLocals (locals : LocalEnv) (stmt : Stmt<unit, 'a>) : Stmt<LocalEnv, 'a> =
+        match stmt with
+        | Scope((), { Env = env; Body = body }) ->
+            let block = { Env = env
+                          Body = List.map (allocateLocals locals) body }
 
-                | expr ->
-                    expr |> Expr.mapa (fun (a, env) -> a, env |> Map.fold addToLocals locals)
+            let env = env |> Map.fold addToLocals locals
+            Scope(env, block)
 
-            expr :: allocateLocals (expr |> Expr.annot |> snd) tail
+        | Stmt((), expr) ->
+            Stmt(locals, expr)
 
-        | [] -> []
-
-    let rec resolveLocals (expr : Expr<'a * LocalEnv>) : Expr<unit> =
+    let resolveLocal (expr : Expr<'a>) (env : LocalEnv) : Expr<unit> option =
         match expr with
-        | Atom ((_, locals), name) ->
-            match Map.tryFind name locals with
-            | Some ref -> (!ref).InitExpr
-            | None -> failwithf "%s wasn't declared" name
-        
-        | List((a, locals), exprs) ->
-            let exprs = exprs |> List.map resolveLocals
-            List((), exprs)
+        | Atom(_, name) ->
+            match Map.tryFind name env with
+            | Some ref -> Some ((!ref).InitExpr)
+            | None -> None
 
         | expr ->
-            expr |> Expr.mapa (fun _ -> ())
+            Some (expr |> Expr.mapa (fun _ -> ()))
+
+    let rec resolveLocals (parentEnvs : LocalEnv list) (stmt : Stmt<LocalEnv, 'a>) : Stmt<unit, unit> =
+        match stmt with
+        | Scope(localEnv, { Env = env; Body = body }) ->
+            let localEnv = localEnv :: parentEnvs
+            let block = { Env = env
+                          Body = List.map (resolveLocals localEnv) body }
+            Scope((), block)
+
+        | Stmt(localEnv, expr) ->
+            match List.tryPick (resolveLocal expr) parentEnvs with
+            | Some expr -> Stmt((), expr)
+            | None -> failwithf "Undeclared identifier in %A" expr
 
 module Compiler =
     let compileToDelegate (delegateType : Type) (code : Expr<_> list) : Delegate =
         let msg = 
             code
-            |> CompilerImpl.addEnvironments Map.empty
+            |> CompilerImpl.makeScope
             |> CompilerImpl.allocateLocals Map.empty
-            |> List.map CompilerImpl.resolveLocals
+            |> CompilerImpl.resolveLocals List.empty
             |> sprintf "%A"
 
         raise <| NotImplementedException msg
