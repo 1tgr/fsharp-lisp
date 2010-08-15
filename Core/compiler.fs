@@ -186,7 +186,7 @@ module internal CompilerImpl =
             | [] -> map
 
         | Expr(env, _) ->
-            map
+            Map.fold (makeILFunctionsFromValue typeBuilder) map env.Values
 
     let emitFunc (ilFuncs : Map<DeclId, ILFunction<'a>>) (ilFunc : ILFunction<'a>) : unit =
         let g = ilFunc.Generator
@@ -242,11 +242,11 @@ module internal CompilerImpl =
         List.iter emitStmt ilFunc.Func.Block.Body
         g.Emit(OpCodes.Ret)
 
-    let wrap2 (f : 'a -> 'b) : MethodInfo =
-        (new System.Func<'a, 'b>(f)).Method
-
-    let wrap3 (f : 'a -> 'b -> 'c) : MethodInfo =
+    let wrap2 (f : 'a -> 'b -> 'c) : MethodInfo =
         (new System.Func<'a, 'b, 'c>(f)).Method
+
+    let wrap3 (f : 'a -> 'b -> 'c -> 'd) : MethodInfo =
+        (new System.Func<'a, 'b, 'c, 'd>(f)).Method
 
 open CompilerImpl
 
