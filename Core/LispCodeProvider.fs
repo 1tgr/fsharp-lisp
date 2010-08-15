@@ -17,9 +17,8 @@ type LispCodeProvider() =
             member this.CompileAssemblyFromSourceBatch(options, sources) = 
                 let statements = 
                     sources
-                    |> List.of_array
-                    |> List.map Parser.parseString
-                    |> List.concat
+                    |> List.ofArray
+                    |> List.collect Parser.parseString
 
                 let results = new CompilerResults(new TempFileCollection())
                 
