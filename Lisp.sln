@@ -1,6 +1,6 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 10.00
-# Visual Studio 2008
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Core", "Core\Core.fsproj", "{51C5CE1D-E45F-44C1-A0DC-6432C0263969}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Compiler", "Compiler\Compiler.fsproj", "{BEFD4806-80E8-46E8-A905-86A03365FA92}"

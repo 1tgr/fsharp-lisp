@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="3.5" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -45,27 +45,6 @@
     <OutputPath>..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <FsYacc Include="FSYacc.fsy" />
-    <FsLex Include="FSLex.fsl" />
-    <Compile Include="ListOp.fs" />
-    <Compile Include="LispVal.fs" />
-    <Compile Include="FSYacc.fsi" />
-    <Compile Include="FSYacc.fs" />
-    <Compile Include="FSLex.fs" />
-    <Compile Include="Parser.fs" />
-    <Compile Include="MaybeBuilder.fs" />
-    <Compile Include="CompilerException.fs" />
-    <Compile Include="ILOpCode.fs" />
-    <Compile Include="ILBranchOpCode_ILBlock.fs" />
-    <Compile Include="IILTarget.fs" />
-    <Compile Include="CodeGenerator.fs" />
-    <Compile Include="ILTargetBase.fs" />
-    <Compile Include="DynamicMethodTarget.fs" />
-    <Compile Include="MethodBuilderTarget.fs" />
-    <Compile Include="Compiler.fs" />
-    <Compile Include="LispCodeProvider.fs" />
-  </ItemGroup>
-  <ItemGroup>
     <Reference Include="FSharp.PowerPack, Version=1.9.6.16, Culture=neutral, PublicKeyToken=a19089b1c74d0809">
       <Name>FSharp.PowerPack</Name>
       <AssemblyName>FSharp.PowerPack.dll</AssemblyName>
@@ -74,6 +53,9 @@
     <Reference Include="System.Core">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
     </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="LispCodeProvider.fs" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\FSharp\1.0\FSharp.PowerPack.Targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
