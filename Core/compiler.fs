@@ -4,13 +4,17 @@ open System
 open System.IO
 open System.Reflection
 open System.Reflection.Emit
+open System.Threading
 open Tim.Lisp.Core.Syntax
 
 module internal CompilerImpl =
+    type DeclId = int
+
     type Block<'a> =
         {
             Body : Stmt<'a> list
         }
+        static member empty : Block<'a> = { Body = List.empty }
 
     and Stmt<'a> = Block of Env<'a> * Block<'a>
                  | Expr of Env<'a> * Expr<'a>
@@ -21,17 +25,28 @@ module internal CompilerImpl =
             Params : string list
         }
 
-    and EnvValue<'a> = Func of Func<'a>
-                     | Var of Expr<'a>
+    and Var<'a> =
+        {
+            DeclEnv : Env<'a>
+            InitExpr : Expr<'a>
+        }
+
+    and EnvValue<'a> = Func of DeclId * Func<'a>
+                     | NetFunc of MethodInfo
+                     | Var of DeclId * Var<'a>
 
     and Env<'a> =
         {
             Parent : Env<'a> option
-            Func : Func<'a> ref
+            Func : DeclId
             Values : Map<string, EnvValue<'a>>
         }
 
-    let makeBlock (env : Env<'a>) (exprs : Expr<'a> list) : Env<'a> * Block<'a> =
+    let nextDeclId : unit -> DeclId =
+        let id = ref 0
+        fun () -> Interlocked.Increment(id)
+
+    let rec makeBlock (env : Env<'a>) (exprs : Expr<'a> list) : Env<'a> * Block<'a> =
         let rec addToScope
             (env   : Env<'a>, block : Block<'a>) 
             (exprs : Expr<'a> list) 
@@ -41,9 +56,34 @@ module internal CompilerImpl =
             | List(_, Atom(_, "define") :: values) :: tail ->
                 let name, value = 
                     match values with
-                    | [Atom(_, name); value] -> name, Var value
-                    | List _ :: _ -> failwithf "Functions not yet implemented"
-                    | _ -> failwithf "define expected 1 value, not %A" values
+                    | [Atom(_, name); value] ->
+                        let var = { DeclEnv = env
+                                    InitExpr = value }
+
+                        name, Var(nextDeclId (), var)
+
+                    | List(_, Atom(_, name) :: atoms) :: values ->
+                        let nameOfAtom =
+                            function
+                            | Atom(_, name) -> name
+                            | _ -> failwith "expected atom"
+
+                        let paramNames = List.map nameOfAtom atoms
+                        let id = nextDeclId()
+
+                        let funcEnv = { Parent = Some env
+                                        Func = id
+                                        Values = Map.empty }
+
+                        let _, block = makeBlock env values
+
+                        let func = { Block = block
+                                     Params = paramNames }
+
+                        name, Func(id, func)
+
+                    | _ ->
+                        failwithf "define expected 1 value, not %A" values
 
                 match block with
                 | { Body = [] } ->
@@ -65,27 +105,19 @@ module internal CompilerImpl =
 
         addToScope (env, { Body = [] }) exprs
 
-    type ILFunction(typeBuilder : TypeBuilder, name : string, returnType : Type, paramNames : string list) =
-        let dynamicMethod = 
-            typeBuilder.DefineMethod(
-                name, 
-                MethodAttributes.Public ||| MethodAttributes.Static, 
-                returnType, 
-                paramNames |> List.map (fun _ -> typeof<int>) |> Array.ofList)
-
-        let generator = dynamicMethod.GetILGenerator()
-
-        member this.DynamicMethod = dynamicMethod
-        member this.Generator = generator
+    let rec lookup (name : string) (env : Env<'a>) : EnvValue<'a> =
+        match Map.tryFind name env.Values, env.Parent with
+        | Some value, _ -> value
+        | None, Some parent -> lookup name parent
+        | None, None -> failwithf "undeclared identifier %s" name
 
     let rec exprType (env : Env<'a>) (expr : Expr<_>) : Type =
         match expr with
         | Atom(_, name) ->
-            match Map.tryFind name env.Values, env.Parent with
-            | Some (Func func), _ -> blockType func.Block
-            | Some (Var expr), _ -> exprType env expr
-            | None, Some parent -> exprType parent expr
-            | None, None -> failwithf "undeclared identifier %s" name
+            match lookup name env with
+            | Func _
+            | NetFunc _ -> failwith "delegates not yet implemented"
+            | Var(_, var) -> exprType var.DeclEnv var.InitExpr
 
         | Float _ ->
             typeof<float>
@@ -94,7 +126,10 @@ module internal CompilerImpl =
             typeof<int>
 
         | List(_, Atom(_, name) :: args) ->
-            failwith "function calls not yet implemented"
+            match lookup name env with
+            | Func(_, func) -> blockType func.Block
+            | NetFunc mi -> mi.ReturnType
+            | Var(_, var) -> failwith "delegates not yet implemented"
 
         | List _ ->
             failwith "quotation not yet implemented"
@@ -108,17 +143,38 @@ module internal CompilerImpl =
         | Block(env, block) :: _ -> blockType block
         | Expr(env, expr) :: _ -> exprType env expr
 
-    let rec makeILFunctionsFromValue (typeBuilder : TypeBuilder) (name : string) (value : EnvValue<'a>) : (ILFunction * Func<'a>) list =
-        match value with
-        | Func func ->
-            let returnType = blockType func.Block
-            let ilFunc = ILFunction(typeBuilder, name, returnType, func.Params)
-            (ilFunc, func) :: List.collect (makeILFunctions typeBuilder) func.Block.Body
+    type ILFunction<'a>(id : DeclId,
+                        func : Func<'a>,
+                        typeBuilder : TypeBuilder, 
+                        name : string)
+        =
+        let dynamicMethod = 
+            typeBuilder.DefineMethod(
+                name, 
+                MethodAttributes.Public ||| MethodAttributes.Static, 
+                blockType func.Block, 
+                func.Params |> List.map (fun _ -> typeof<int>) |> Array.ofList)
 
+        let generator = dynamicMethod.GetILGenerator()
+
+        member this.Id = id
+        member this.Func = func
+        member this.TypeBuilder = typeBuilder
+        member this.Name = name
+        member this.DynamicMethod = dynamicMethod
+        member this.Generator = generator
+
+    let rec makeILFunctionsFromValue (typeBuilder : TypeBuilder) (name : string) (value : EnvValue<'a>) : (DeclId * ILFunction<'a>) list =
+        match value with
+        | Func(id, func) ->
+            let ilFunc = new ILFunction<'a>(id, func, typeBuilder, name)
+            (id, ilFunc) :: List.collect (makeILFunctions typeBuilder) func.Block.Body
+
+        | NetFunc _
         | Var _ ->
             []
 
-    and makeILFunctions (typeBuilder : TypeBuilder) (stmt : Stmt<'a>) : (ILFunction * Func<'a>) list =
+    and makeILFunctions (typeBuilder : TypeBuilder) (stmt : Stmt<'a>) : (DeclId * ILFunction<'a>) list =
         match stmt with
         | Block(env, block) ->
             env.Values
@@ -129,18 +185,16 @@ module internal CompilerImpl =
         | Expr _ ->
             []
 
-    let emitFunc (ilFunc : ILFunction) (func : Func<_>) : unit =
+    let emitFunc (ilFuncs : Map<DeclId, ILFunction<'a>>) (ilFunc : ILFunction<'a>) : unit =
         let g = ilFunc.Generator
 
         let rec emitExpr (env : Env<_>) (expr : Expr<_>) : unit =
             match expr with
             | Atom(_, name) ->
-                match Map.tryFind name env.Values, env.Parent with
-                | Some (Func _), _ -> failwith "delegates not yet implemented"
-                | Some (Var expr), _ -> emitExpr env expr
-                | None, Some parent when parent.Func <> env.Func -> failwith "closures not yet implemented"
-                | None, Some parent -> emitExpr parent expr
-                | None, None -> failwithf "undeclared identifier %s" name
+                match lookup name env with
+                | Func _
+                | NetFunc _ -> failwith "delegates not yet implemented"
+                | Var(_, var) -> emitExpr var.DeclEnv var.InitExpr
 
             | Float(_, n) ->
                 g.Emit(OpCodes.Ldc_R4, n)
@@ -149,7 +203,15 @@ module internal CompilerImpl =
                 g.Emit(OpCodes.Ldc_I4, n)
 
             | List(_, Atom(_, name) :: args) ->
-                failwith "function calls not yet implemented"
+                match lookup name env with
+                | Func(id, _) ->
+                    g.Emit(OpCodes.Call, ilFuncs.[id].DynamicMethod)
+
+                | NetFunc mi ->
+                    g.Emit(OpCodes.Call, mi)
+
+                | Var _ ->
+                    failwith "delegates not yet implemented"
 
             | List _ ->
                 failwith "quotation not yet implemented"
@@ -165,7 +227,7 @@ module internal CompilerImpl =
             | Expr(env, expr) ->
                 emitExpr env expr
 
-        List.iter emitStmt func.Block.Body
+        List.iter emitStmt ilFunc.Func.Block.Body
         g.Emit(OpCodes.Ret)
 
 open CompilerImpl
@@ -173,18 +235,27 @@ open CompilerImpl
 module Compiler =
     let compileToDelegate (delegateType : Type) (code : Expr<'a> list) : Delegate =
         let main =
-            let mainRef = ref { Block = { Body = [] }; Params = [] }
-            let mainEnv, mainBlock = makeBlock { Parent = None; Func = mainRef; Values = Map.empty } code
-            mainRef := { !mainRef with Block = mainBlock }
-            Func !mainRef
+            let id = nextDeclId ()
+            let netFunctions = ["Console.WriteLine", typeof<Console>.GetMethod("WriteLine", Array.empty)]
+
+            let values =
+                netFunctions
+                |> List.map (fun (name, methodInfo) -> name, NetFunc methodInfo)
+                |> Map.ofList
+
+            let mainEnv, mainBlock = makeBlock { Parent = None; Func = id; Values = values } code
+            let main = { Block = mainBlock; Params = List.empty }
+            Func(id, main)
 
         let name = AssemblyName("DynamicAssembly")
         let assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.RunAndSave)
         let moduleBuilder = assemblyBuilder.DefineDynamicModule(name.Name + ".dll")
         let typeBuilder = moduleBuilder.DefineType("Program")
-        
-        for (ilFunc, func) in makeILFunctionsFromValue typeBuilder "main" main do
-            emitFunc ilFunc func
+        let ilFuncs = makeILFunctionsFromValue typeBuilder "main" main
+        let ilFuncMap = Map.ofList ilFuncs
+
+        for (_, ilFunc) in ilFuncs do
+            emitFunc ilFuncMap ilFunc
 
         let t = typeBuilder.CreateType()
         assemblyBuilder.Save(name.Name + ".dll")
