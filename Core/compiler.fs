@@ -4,12 +4,16 @@ open System
 open Tim.Lisp.Core.Syntax
 
 module internal CompilerImpl =
-    type InitEnv = Map<string, Expr<unit>>
+    type InitEnv =
+        {
+            Parent : InitEnv option
+            Values : Map<string, Expr<unit>>
+        }
 
     type Stmt<'a, 'exprTag> = Scope of 'a * Stmt<'a, 'exprTag> list
                             | Stmt of 'a * Expr<'exprTag>
 
-    let makeScope (exprs : Expr<'a> list) : Stmt<InitEnv, 'a> =
+    let makeScope (env : InitEnv) (exprs : Expr<'a> list) : Stmt<InitEnv, 'a> =
         let rec addToScope
             (env   : InitEnv, body : Stmt<InitEnv, 'a> list) 
             (exprs : Expr<'a> list) 
@@ -23,11 +27,13 @@ module internal CompilerImpl =
 
                     match body with
                     | [] ->
-                        let oenv, obody = Map.add name value env, []
-                        tail |> addToScope (oenv, obody)
+                        tail |> addToScope ({ env with Values = Map.add name value env.Values }, [])
 
                     | _ ->
-                        let ienv, ibody = tail |> addToScope (Map.ofList [(name, value)], [])
+                        let ienv = { Parent = Some env
+                                     Values = Map.ofList [(name, value)] }
+
+                        let ienv, ibody = tail |> addToScope (ienv, [])
                         env, body @ [Scope(ienv, ibody)]
 
                 | List _ :: _ ->
@@ -44,36 +50,34 @@ module internal CompilerImpl =
                 env, body
 
         exprs
-        |> addToScope (Map.empty, List.empty)
+        |> addToScope (env, List.empty)
         |> Scope
 
-    let rec resolveLocal (parentEnvs : InitEnv list) (expr : Expr<'a>) : Expr<'a> =
+    let rec resolveLocal (env : InitEnv) (expr : Expr<'a>) : Expr<'a> =
         match expr with
-        | Atom(a, name) ->
-            match parentEnvs with
-            | head :: tail ->
-                match Map.tryFind name head with
-                | Some initExpr -> Expr.mapa (fun () -> a) initExpr
-                | None -> resolveLocal tail expr
-
-            | [] ->
-                failwithf "%s: undeclared identifier" name
+        | Atom(a, name) ->            
+            match Map.tryFind name env.Values with
+            | Some initExpr -> Expr.mapa (fun () -> a) initExpr
+            | None ->
+                match env.Parent with
+                | Some env -> resolveLocal env expr
+                | None -> failwithf "%s: undeclared identifier" name
 
         | List(a, exprs) ->
-            let exprs = exprs |> List.map (resolveLocal parentEnvs)
+            let exprs = exprs |> List.map (resolveLocal env)
             List(a, exprs)
 
         | expr ->
             expr
 
-    let rec resolveLocals (parentEnvs : InitEnv list) (stmt : Stmt<InitEnv, 'a>) : Stmt<unit, 'a> =
+    let rec resolveLocals (stmt : Stmt<InitEnv, 'a>) : Stmt<unit, 'a> =
         match stmt with
-        | Scope(localEnv, body) ->
-            let body = body |> List.map (resolveLocals (localEnv :: parentEnvs))
+        | Scope(_, body) ->
+            let body = body |> List.map resolveLocals
             Scope((), body)
 
-        | Stmt(localEnv, expr) ->
-            Stmt((), resolveLocal parentEnvs expr)
+        | Stmt(env, expr) ->
+            Stmt((), resolveLocal env expr)
 
     let rec print (indent : int) (stmt : Stmt<_, _>) : string list =
         let prefix = new string(' ', indent)
@@ -85,8 +89,8 @@ module Compiler =
     let compileToDelegate (delegateType : Type) (code : Expr<_> list) : Delegate =
         let msg = 
             code
-            |> CompilerImpl.makeScope
-            |> CompilerImpl.resolveLocals List.empty
+            |> CompilerImpl.makeScope { Parent = None; Values = Map.empty }
+            |> CompilerImpl.resolveLocals
             |> CompilerImpl.print 0
             |> String.concat "\n"
 
