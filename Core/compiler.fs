@@ -21,7 +21,7 @@ module internal CompilerImpl =
 
     and Func<'a> =
         {
-            Block : Block<'a>
+            Block : Block<'a> ref
             Params : string list
         }
 
@@ -32,7 +32,9 @@ module internal CompilerImpl =
         }
 
     and EnvValue<'a> = Func of DeclId * Func<'a>
+                     | IfFunc
                      | NetFunc of MethodInfo
+                     | Arg of int
                      | Var of DeclId * Var<'a>
 
     and Env<'a> =
@@ -69,17 +71,19 @@ module internal CompilerImpl =
                             | _ -> failwith "expected atom"
 
                         let paramNames = List.map nameOfAtom atoms
+                        let blockRef = ref { Body = List.empty }
+                        let func = { Block = blockRef
+                                     Params = paramNames }
+
                         let id = nextDeclId()
+                        let envValues = (name, Func(id, func)) :: List.mapi (fun i name -> name, Arg i) paramNames
 
                         let funcEnv = { Parent = Some env
                                         Func = id
-                                        Values = Map.empty }
+                                        Values = Map.ofList envValues }
 
-                        let _, block = makeBlock env values
-
-                        let func = { Block = block
-                                     Params = paramNames }
-
+                        let _, block = makeBlock funcEnv values
+                        blockRef := block
                         name, Func(id, func)
 
                     | _ ->
@@ -116,9 +120,9 @@ module internal CompilerImpl =
         match expr with
         | Atom(_, name) ->
             match lookup name env with
-            | Func _
-            | NetFunc _ -> failwith "delegates not yet implemented"
+            | Arg _ -> typeof<int>
             | Var(_, var) -> exprType var.DeclEnv var.InitExpr
+            | _ -> failwith "delegates not yet implemented"
 
         | Float _ ->
             typeof<float>
@@ -128,9 +132,19 @@ module internal CompilerImpl =
 
         | List(_, Atom(_, name) :: args) ->
             match lookup name env with
-            | Func(_, func) -> blockType func.Block
-            | NetFunc mi -> mi.ReturnType
-            | Var(_, var) -> failwith "delegates not yet implemented"
+            | Func(_, func) ->
+                blockType !func.Block
+
+            | IfFunc ->
+                match args with
+                | [test; ifTrue; ifFalse] -> exprType env ifTrue
+                | _ -> failwith "expected 3 args for if, not %A" args
+
+            | NetFunc mi ->
+                mi.ReturnType
+
+            | Arg _ | Var _ ->
+                failwith "delegates not yet implemented"
 
         | List _ ->
             failwith "quotation not yet implemented"
@@ -153,7 +167,7 @@ module internal CompilerImpl =
             typeBuilder.DefineMethod(
                 name, 
                 MethodAttributes.Public ||| MethodAttributes.Static, 
-                blockType func.Block, 
+                blockType !func.Block, 
                 func.Params |> List.map (fun _ -> typeof<int>) |> Array.ofList)
 
         let generator = dynamicMethod.GetILGenerator()
@@ -170,13 +184,11 @@ module internal CompilerImpl =
         | Func(id, func) ->
             let ilFunc = new ILFunction<'a>(id, func, typeBuilder, name)
             let map = Map.add id ilFunc map
-            match List.rev func.Block.Body with
+            match List.rev (!func.Block).Body with
             | lastStmt :: _ -> makeILFunctions typeBuilder map lastStmt
             | [] -> map
 
-        | NetFunc _
-        | Var _ ->
-            map
+        | _ -> map
 
     and makeILFunctions (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<'a>>) (stmt : Stmt<'a>) : Map<DeclId, ILFunction<'a>> =
         match stmt with
@@ -191,14 +203,20 @@ module internal CompilerImpl =
     let emitFunc (ilFuncs : Map<DeclId, ILFunction<'a>>) (ilFunc : ILFunction<'a>) : unit =
         let g = ilFunc.Generator
 
-        let rec emitExpr (env : Env<_>) (expr : Expr<_>) : unit =
+        let rec call (mi : MethodInfo) (env : Env<_>) (args : Expr<_> list) : unit =
+            for arg in args do
+                emitExpr env arg
+
+            g.Emit(OpCodes.Call, mi)
+
+        and emitExpr (env : Env<_>) (expr : Expr<_>) : unit =
             try
                 match expr with
                 | Atom(_, name) ->
                     match lookup name env with
-                    | Func _
-                    | NetFunc _ -> failwith "delegates not yet implemented"
+                    | Arg i -> g.Emit(OpCodes.Ldarg, i)
                     | Var(_, var) -> emitExpr var.DeclEnv var.InitExpr
+                    | _ -> failwith "delegates not yet implemented"
 
                 | Float(_, n) ->
                     g.Emit(OpCodes.Ldc_R4, n)
@@ -211,15 +229,43 @@ module internal CompilerImpl =
                     | Func(id, _) ->
                         match Map.tryFind id ilFuncs with
                         | Some ilFunc ->
-                            g.Emit(OpCodes.Call, ilFunc.DynamicMethod)
+                            call ilFunc.DynamicMethod env args
 
                         | None ->
                             failwithf "no ILFunction for name = %s, id = %d" name id
 
-                    | NetFunc mi ->
-                        g.Emit(OpCodes.Call, mi)
+                    | IfFunc ->
+                        match args with
+                        | [List(_, [Atom(_, "="); left; right]); ifEqual; ifNotEqual] ->
+                            let eqLabel = g.DefineLabel()
+                            let endLabel = g.DefineLabel()
+                            emitExpr env left
+                            emitExpr env right
+                            g.Emit(OpCodes.Beq, eqLabel)
+                            emitExpr env ifNotEqual
+                            g.Emit(OpCodes.Br, endLabel)
+                            g.MarkLabel(eqLabel)
+                            emitExpr env ifEqual
+                            g.MarkLabel(endLabel)
 
-                    | Var _ ->
+                        | [test; ifTrue; ifFalse] ->
+                            let elseLabel = g.DefineLabel()
+                            let endLabel = g.DefineLabel()
+                            emitExpr env test
+                            g.Emit(OpCodes.Brfalse, elseLabel)
+                            emitExpr env ifTrue
+                            g.Emit(OpCodes.Br, endLabel)
+                            g.MarkLabel(elseLabel)
+                            emitExpr env ifFalse
+                            g.MarkLabel(endLabel)
+
+                        | _ ->
+                            failwith "expected 3 args for if, not %A" args
+
+                    | NetFunc mi ->
+                        call mi env args
+
+                    | Arg _ | Var _ ->
                         failwith "delegates not yet implemented"
 
                 | List _ ->
@@ -239,7 +285,7 @@ module internal CompilerImpl =
             | Expr(env, expr) ->
                 emitExpr env expr
 
-        List.iter emitStmt ilFunc.Func.Block.Body
+        List.iter emitStmt (!ilFunc.Func.Block).Body
         g.Emit(OpCodes.Ret)
 
     let wrap2 (f : 'a -> 'b -> 'c) : MethodInfo =
@@ -254,18 +300,17 @@ module Compiler =
     let compileToDelegate (delegateType : Type) (code : Expr<'a> list) : Delegate =
         let main  =
             let values =
-                ["Console.WriteLine", typeof<Console>.GetMethod("WriteLine", Array.empty)
-                 "if",                wrap3 <| fun test ifTrue ifFalse -> if test then ifTrue else ifFalse
-                 "+",                 wrap2 <| fun a b -> a + b
-                 "-",                 wrap2 <| fun a b -> a - b
-                 "*",                 wrap2 <| fun a b -> a * b
-                 "/",                 wrap2 <| fun a b -> a / b]
-                |> List.map (fun (name, methodInfo) -> name, NetFunc methodInfo)
+                ["Console.WriteLine", NetFunc <| typeof<Console>.GetMethod("WriteLine", Array.empty)
+                 "+",                 NetFunc <| wrap2(fun a b -> a + b)
+                 "-",                 NetFunc <| wrap2(fun a b -> a - b)
+                 "*",                 NetFunc <| wrap2(fun a b -> a * b)
+                 "/",                 NetFunc <| wrap2(fun a b -> a / b)
+                 "if",                IfFunc]
                 |> Map.ofList
 
             let id = nextDeclId ()
             let mainEnv, mainBlock = makeBlock { Parent = None; Func = id; Values = values } code
-            let main = { Block = mainBlock; Params = List.empty }
+            let main = { Block = ref mainBlock; Params = List.empty }
             Func(id, main)
 
         let name = AssemblyName("DynamicAssembly")
