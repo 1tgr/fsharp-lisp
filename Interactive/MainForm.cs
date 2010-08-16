@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Windows.Forms;
+using FParsec;
 using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
 using Tim.Lisp.Core;
@@ -36,7 +37,7 @@ namespace Tim.Lisp.Interactive
 
             try
             {
-                FSharpList<LispVal> code = Parse();
+                FSharpList<Syntax.Expr<Position>> code = Parse();
                 UpdateTextBoxes(code);
 
                 Action action = (Action) Compiler.compileToDelegate(typeof(Action), code);
@@ -48,7 +49,7 @@ namespace Tim.Lisp.Interactive
             }
         }
 
-        private FSharpList<LispVal> Parse()
+        private FSharpList<Syntax.Expr<Position>> Parse()
         {
             string text = textBox.SelectedText;
             if (text.Length == 0)
@@ -57,23 +58,15 @@ namespace Tim.Lisp.Interactive
             return Parser.parseString(text);
         }
 
-        private void UpdateTextBoxes(FSharpList<LispVal> code)
+        private void UpdateTextBoxes<T>(FSharpList<Syntax.Expr<T>> code)
         {
             sexpTextBox.Text = AnyToString(code);
-
-            FSharpList<LispVal> codeWithPrimitives =
-                ListModule.of_seq(
-                    SeqModule
-                        .of_list(code)
-                        .Select(v => CodeGenerator.insertPrimitives(v)));
-
-            primitivesTextBox.Text = AnyToString(codeWithPrimitives);
         }
 
         private static string AnyToString<T>(T codeWithPrimitives)
         {
-            return ExtraTopLevelOperators
-                .any_to_string(codeWithPrimitives)
+            return Operators
+                .ToString(codeWithPrimitives)
                 .Replace("\n", "\r\n");
         }
     }

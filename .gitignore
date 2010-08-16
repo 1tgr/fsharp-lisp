@@ -1,2 +1,7 @@
+*.suo
+*.user
 bin
+lib/NUnit-2.5.5.10112
 obj
+test.cmd
+TestResult.xml

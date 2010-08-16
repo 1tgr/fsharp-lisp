@@ -71,7 +71,7 @@
             this.parseButton.Image = ((System.Drawing.Image)(resources.GetObject("parseButton.Image")));
             this.parseButton.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.parseButton.Name = "parseButton";
-            this.parseButton.Size = new System.Drawing.Size(38, 22);
+            this.parseButton.Size = new System.Drawing.Size(39, 22);
             this.parseButton.Text = "&Parse";
             this.parseButton.Click += new System.EventHandler(this.parseButton_Click);
             // 
@@ -81,7 +81,7 @@
             runButton.Image = ((System.Drawing.Image)(resources.GetObject("runButton.Image")));
             runButton.ImageTransparentColor = System.Drawing.Color.Magenta;
             runButton.Name = "runButton";
-            runButton.Size = new System.Drawing.Size(30, 22);
+            runButton.Size = new System.Drawing.Size(32, 22);
             runButton.Text = "&Run";
             runButton.Click += new System.EventHandler(this.runButton_Click);
             // 
@@ -115,8 +115,8 @@
             this.textBox.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
             this.textBox.Size = new System.Drawing.Size(292, 25);
             this.textBox.TabIndex = 1;
-            this.textBox.Text = "(define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))\r\n(MessageBox.Show (String.F" +
-                "ormat \"6! = {0}\" (fact 6)) \"Lisp Demo\")";
+            this.textBox.Text = "(define (factorial n)\r\n  (if (= n 0) \r\n    1 \r\n    (* n (factorial (- n 1)))))\r\n(" +
+                "factorial 6)\r\n";
             this.textBox.WordWrap = false;
             // 
             // tabControl1
@@ -159,7 +159,7 @@
             tabPage2.Location = new System.Drawing.Point(4, 22);
             tabPage2.Name = "tabPage2";
             tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            tabPage2.Size = new System.Drawing.Size(284, 100);
+            tabPage2.Size = new System.Drawing.Size(284, 186);
             tabPage2.TabIndex = 1;
             tabPage2.Text = "Primitives";
             tabPage2.UseVisualStyleBackColor = true;
