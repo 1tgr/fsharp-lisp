@@ -133,7 +133,9 @@ module internal CompilerImpl =
         | List(_, Atom(_, name) :: args) ->
             match lookup name env with
             | Func(_, func) ->
-                blockType !func.Block
+                // TODO: type inference for recursive functions
+                //blockType !func.Block
+                typeof<int>
 
             | IfFunc ->
                 match args with
@@ -182,11 +184,14 @@ module internal CompilerImpl =
     let rec makeILFunctionsFromValue (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<'a>>) (name : string) (value : EnvValue<'a>) : Map<DeclId, ILFunction<'a>> =
         match value with
         | Func(id, func) ->
-            let ilFunc = new ILFunction<'a>(id, func, typeBuilder, name)
-            let map = Map.add id ilFunc map
-            match List.rev (!func.Block).Body with
-            | lastStmt :: _ -> makeILFunctions typeBuilder map lastStmt
-            | [] -> map
+            if (Map.containsKey id map) then
+                map
+            else
+                let ilFunc = new ILFunction<'a>(id, func, typeBuilder, name)
+                let map = Map.add id ilFunc map
+                match List.rev (!func.Block).Body with
+                | lastStmt :: _ -> makeILFunctions typeBuilder map lastStmt
+                | [] -> map
 
         | _ -> map
 
