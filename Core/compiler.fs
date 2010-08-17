@@ -12,12 +12,13 @@ module internal CompilerImpl =
 
     type Block<'a> =
         {
+            Env : Env<'a>
             Body : Stmt<'a> list
         }
-        static member empty : Block<'a> = { Body = List.empty }
+        static member empty : Block<'a> = { Env = Env.empty; Body = List.empty }
 
-    and Stmt<'a> = Block of Env<'a> * Block<'a>
-                 | Expr of Env<'a> * Expr<'a>
+    and Stmt<'a> = Block of Block<'a>
+                 | Expr of Expr<'a>
 
     and Func<'a> =
         {
@@ -43,16 +44,32 @@ module internal CompilerImpl =
             Func : DeclId
             Values : Map<string, EnvValue<'a>>
         }
+        static member empty : Env<'a> = { Parent = None; Func = 0; Values = Map.empty }
 
     let nextDeclId : unit -> DeclId =
         let id = ref 0
         fun () -> Interlocked.Increment(id)
 
-    let rec makeBlock (env : Env<'a>) (exprs : Expr<'a> list) : Env<'a> * Block<'a> =
-        let rec addToScope
-            (env   : Env<'a>, block : Block<'a>) 
+    let rec makeFunc (env : Env<_>) (name : string) (paramNames : string list) (body : Expr<_> list) : DeclId * Func<_> =
+        let blockRef = ref Block.empty
+        let func = { Block = blockRef
+                     Params = paramNames }
+
+        let id = nextDeclId()
+        let envValues = (name, Func(id, func)) :: List.mapi (fun i name -> name, Arg i) paramNames
+
+        let funcEnv = { Parent = Some env
+                        Func = id
+                        Values = Map.ofList envValues }
+
+        blockRef := makeBlock funcEnv body
+        id, func
+
+    and makeBlock (env : Env<'a>) (exprs : Expr<'a> list) : Block<'a> =
+        let rec addToBlock
+            (block : Block<'a>) 
             (exprs : Expr<'a> list) 
-                   : Env<'a> * Block<'a>
+                   : Block<'a>
             =
             match exprs with
             | List(_, Atom(_, "define") :: values) :: tail ->
@@ -64,26 +81,14 @@ module internal CompilerImpl =
 
                         name, Var(nextDeclId (), var)
 
-                    | List(_, Atom(_, name) :: atoms) :: values ->
+                    | List(_, Atom(_, name) :: atoms) :: body ->
                         let nameOfAtom =
                             function
                             | Atom(_, name) -> name
                             | _ -> failwith "expected atom"
 
                         let paramNames = List.map nameOfAtom atoms
-                        let blockRef = ref { Body = List.empty }
-                        let func = { Block = blockRef
-                                     Params = paramNames }
-
-                        let id = nextDeclId()
-                        let envValues = (name, Func(id, func)) :: List.mapi (fun i name -> name, Arg i) paramNames
-
-                        let funcEnv = { Parent = Some env
-                                        Func = id
-                                        Values = Map.ofList envValues }
-
-                        let _, block = makeBlock funcEnv values
-                        blockRef := block
+                        let id, func = makeFunc env name paramNames body
                         name, Func(id, func)
 
                     | _ ->
@@ -91,24 +96,23 @@ module internal CompilerImpl =
 
                 match block with
                 | { Body = [] } ->
-                    let env = { env with Values = Map.add name value env.Values }
-                    tail |> addToScope (env, block)
+                    let env = { block.Env with Values = Map.add name value env.Values }
+                    tail |> addToBlock { block with Env = env }
 
                 | _ ->
                     let ienv = { env with Parent = Some env
                                           Values = Map.ofList [(name, value)] }
 
-                    let ienv, iblock = tail |> addToScope (ienv, { Body = [] })
-                    env, { block with Body = block.Body @ [Block(ienv, iblock)] }
+                    let iblock = tail |> addToBlock { Block.empty with Env = ienv }
+                    { block with Body = block.Body @ [Block iblock] }
 
             | head :: tail ->
-                let scope = env, { block with Body = block.Body @ [Expr(env, head)] }
-                tail |> addToScope scope
+                tail |> addToBlock { block with Body = block.Body @ [Expr head] }
 
             | [] ->
-                env, block
+                block
 
-        addToScope (env, { Body = [] }) exprs
+        addToBlock { Block.empty with Env = env } exprs
 
     let rec lookup (name : string) (env : Env<'a>) : EnvValue<'a> =
         match Map.tryFind name env.Values, env.Parent with
@@ -157,8 +161,8 @@ module internal CompilerImpl =
     and blockType (block : Block<_>) : Type =
         match List.rev block.Body with
         | [] -> typeof<Void>
-        | Block(env, block) :: _ -> blockType block
-        | Expr(env, expr) :: _ -> exprType env expr
+        | Block block :: _ -> blockType block
+        | Expr expr :: _ -> exprType block.Env expr
 
     type ILFunction<'a>(id : DeclId,
                         func : Func<'a>,
@@ -195,15 +199,16 @@ module internal CompilerImpl =
 
         | _ -> map
 
+    and makeILFunctionsFromEnv (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<'a>>) (env : Env<'a>) : Map<DeclId, ILFunction<'a>> =
+        Map.fold (makeILFunctionsFromValue typeBuilder) map env.Values
+
     and makeILFunctions (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<'a>>) (stmt : Stmt<'a>) : Map<DeclId, ILFunction<'a>> =
         match stmt with
-        | Block(env, block) ->
-            match List.rev block.Body with
-            | lastStmt :: _ -> makeILFunctions typeBuilder map lastStmt
-            | [] -> map
+        | Block block ->
+            List.fold (makeILFunctions typeBuilder) (makeILFunctionsFromEnv typeBuilder map block.Env) block.Body
 
-        | Expr(env, _) ->
-            Map.fold (makeILFunctionsFromValue typeBuilder) map env.Values
+        | Expr _ ->
+            map
 
     let emitFunc (ilFuncs : Map<DeclId, ILFunction<'a>>) (ilFunc : ILFunction<'a>) : unit =
         let g = ilFunc.Generator
@@ -282,15 +287,18 @@ module internal CompilerImpl =
             with ex ->
                 raise <| InvalidOperationException(sprintf "%s at %A" ex.Message (Expr.annot expr), ex)
 
-        let rec emitStmt (stmt : Stmt<_>) : unit =
-            match stmt with
-            | Block(_, block) ->
-                List.iter emitStmt block.Body
+        let rec emitBlock (block : Block<_>) : unit =
+            List.iter (emitStmt block.Env) block.Body
 
-            | Expr(env, expr) ->
+        and emitStmt (env : Env<_>) (stmt : Stmt<_>) : unit =
+            match stmt with
+            | Block block ->
+                emitBlock block
+
+            | Expr expr ->
                 emitExpr env expr
 
-        List.iter emitStmt (!ilFunc.Func.Block).Body
+        emitBlock !ilFunc.Func.Block
         g.Emit(OpCodes.Ret)
 
     let wrap2 (f : 'a -> 'b -> 'c) : MethodInfo =
@@ -303,7 +311,7 @@ open CompilerImpl
 
 module Compiler =
     let compileToDelegate (delegateType : Type) (code : Expr<'a> list) : Delegate =
-        let main  =
+        let main =
             let values =
                 ["Console.WriteLine", NetFunc <| typeof<Console>.GetMethod("WriteLine", Array.empty)
                  "+",                 NetFunc <| wrap2(fun a b -> a + b)
@@ -313,16 +321,14 @@ module Compiler =
                  "if",                IfFunc]
                 |> Map.ofList
 
-            let id = nextDeclId ()
-            let mainEnv, mainBlock = makeBlock { Parent = None; Func = id; Values = values } code
-            let main = { Block = ref mainBlock; Params = List.empty }
-            Func(id, main)
+            let _, main = makeFunc { Env.empty with Values = values } "main" List.empty code
+            main
 
         let name = AssemblyName("DynamicAssembly")
         let assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.RunAndSave)
         let moduleBuilder = assemblyBuilder.DefineDynamicModule(name.Name + ".dll")
         let typeBuilder = moduleBuilder.DefineType("Program")
-        let ilFuncs = makeILFunctionsFromValue typeBuilder Map.empty "main" main
+        let ilFuncs = makeILFunctionsFromEnv typeBuilder Map.empty (!main.Block).Env
 
         for (_, ilFunc) in Map.toSeq ilFuncs do
             emitFunc ilFuncs ilFunc
