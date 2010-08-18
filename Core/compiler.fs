@@ -8,6 +8,14 @@ open System.Threading
 open Tim.Lisp.Core.Syntax
 
 module internal CompilerImpl =
+    type Asm<'a> =
+        {
+            OpCode : OpCode
+            Arg : obj option
+            ResultType : Type
+            Stack : Expr<'a> list
+        }
+
     type DeclId = int
 
     type Block<'a> =
@@ -17,7 +25,8 @@ module internal CompilerImpl =
         }
         static member empty : Block<'a> = { Env = Env.empty; Body = List.empty }
 
-    and Stmt<'a> = Block of Block<'a>
+    and Stmt<'a> = Asm of Asm<'a>
+                 | Block of Block<'a>
                  | Expr of Expr<'a>
 
     and Func<'a> =
@@ -49,6 +58,22 @@ module internal CompilerImpl =
     let nextDeclId : unit -> DeclId =
         let id = ref 0
         fun () -> Interlocked.Increment(id)
+
+    let makeAsm (opCodeName : string) (argName : string option) (resultTypeName : string) (stack : Expr<_> list) : Asm<_> =
+        let fieldInfo = 
+            typeof<OpCodes>.GetField(
+                opCodeName.Replace(".", "_"), 
+                BindingFlags.Public ||| BindingFlags.Static ||| BindingFlags.IgnoreCase)
+
+        if fieldInfo = null then
+            failwithf "invalid opcode %s" opCodeName
+
+        {
+            OpCode = unbox <| fieldInfo.GetValue(null)
+            Arg = None
+            ResultType = typeof<int>.Assembly.GetType(resultTypeName, true)
+            Stack = stack
+        }
 
     let rec makeFunc (env : Env<_>) (name : string) (paramNames : string list) (body : Expr<_> list) : DeclId * Func<_> =
         let blockRef = ref Block.empty
@@ -106,6 +131,23 @@ module internal CompilerImpl =
                     let iblock = tail |> addToBlock { Block.empty with Env = ienv }
                     { block with Body = block.Body @ [Block iblock] }
 
+            | List(_, Atom(_, ".asm") :: values) :: tail ->
+                let asm =
+                    match values with
+                    | Atom(_, opCodeName) :: Atom(_, resultTypeName) :: stack ->
+                        makeAsm opCodeName None resultTypeName stack
+
+                    | List(_, [Atom(_, opCodeName); Atom(_, argName)]) :: Atom(_, resultTypeName) :: stack ->
+                        makeAsm opCodeName (Some argName) resultTypeName stack
+
+                    | List(_, [Atom(_, opCodeName); Int(_, n)]) :: Atom(_, resultTypeName) :: stack ->
+                        makeAsm opCodeName (Some (string n)) resultTypeName stack
+
+                    | _ ->
+                        failwithf ".asm expected at least 3 values, not %A" values
+
+                tail |> addToBlock { block with Body = block.Body @ [Asm asm] }
+
             | head :: tail ->
                 tail |> addToBlock { block with Body = block.Body @ [Expr head] }
 
@@ -161,6 +203,7 @@ module internal CompilerImpl =
     and blockType (block : Block<_>) : Type =
         match List.rev block.Body with
         | [] -> typeof<Void>
+        | Asm asm :: _ -> asm.ResultType
         | Block block :: _ -> blockType block
         | Expr expr :: _ -> exprType block.Env expr
 
@@ -204,11 +247,8 @@ module internal CompilerImpl =
 
     and makeILFunctions (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<'a>>) (stmt : Stmt<'a>) : Map<DeclId, ILFunction<'a>> =
         match stmt with
-        | Block block ->
-            List.fold (makeILFunctions typeBuilder) (makeILFunctionsFromEnv typeBuilder map block.Env) block.Body
-
-        | Expr _ ->
-            map
+        | Block block -> List.fold (makeILFunctions typeBuilder) (makeILFunctionsFromEnv typeBuilder map block.Env) block.Body
+        | _ -> map
 
     let emitFunc (ilFuncs : Map<DeclId, ILFunction<'a>>) (ilFunc : ILFunction<'a>) : unit =
         let g = ilFunc.Generator
@@ -287,16 +327,22 @@ module internal CompilerImpl =
             with ex ->
                 raise <| InvalidOperationException(sprintf "%s at %A" ex.Message (Expr.annot expr), ex)
 
+        let emitAsm (env : Env<_>) (asm : Asm<_>) : unit =
+            for stack in asm.Stack do
+                emitExpr env stack
+
+            match asm.Arg with
+            | None -> g.Emit(asm.OpCode)
+            | Some _ -> failwithf "asm args not yet implemented"
+
         let rec emitBlock (block : Block<_>) : unit =
             List.iter (emitStmt block.Env) block.Body
 
         and emitStmt (env : Env<_>) (stmt : Stmt<_>) : unit =
             match stmt with
-            | Block block ->
-                emitBlock block
-
-            | Expr expr ->
-                emitExpr env expr
+            | Asm asm -> emitAsm env asm
+            | Block block -> emitBlock block
+            | Expr expr -> emitExpr env expr
 
         emitBlock !ilFunc.Func.Block
         g.Emit(OpCodes.Ret)

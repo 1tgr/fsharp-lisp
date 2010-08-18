@@ -14,7 +14,7 @@ module internal ParserImpl =
         pipe2 getPosition p (fun a b -> f(a, b))
 
     let atom : Parser<Expr<Position>, unit> =
-        many1Chars (choice [asciiLetter; anyOf "=+-*/."]) .>> spaces |> node Atom
+        many1Chars (choice [asciiLetter; digit; anyOf "=+-*/."]) .>> spaces |> node Atom
 
     let number : Parser<Expr<Position>, unit> =
         let numberNode (position : Position) (literal : NumberLiteral) : Expr<Position> =

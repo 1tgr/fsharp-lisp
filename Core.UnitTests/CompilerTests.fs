@@ -20,6 +20,22 @@ type CompilerTests() =
         eval "(define number 6) number" |> shouldEqual 6
 
     [<Test>]
+    member this.asm_NoArg_NoStack() =
+        eval "(.asm ldc.i4.0 System.Int32)" |> shouldEqual 0
+
+    [<Test>]
+    member this.asm_Arg_NoStack() =
+        eval "(.asm (ldc.i4 6) System.Int32)" |> shouldEqual 6
+
+    [<Test>]
+    member this.asm_NoArg_Stack() =
+        eval "(.asm add System.Int32 2 4)" |> shouldEqual 6
+
+    [<Test>]
+    member this.asm_Arg_Stack() =
+        evalVoid @"(.asm (call System.Console.WriteLine) System.Void ""hello"")"
+
+    [<Test>]
     member this.givenNonTailRecursiveFunction_ShouldNotTailCall() =
         eval @"
 (define (factorial n)
