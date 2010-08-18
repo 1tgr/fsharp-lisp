@@ -70,7 +70,7 @@ module internal CompilerImpl =
 
         {
             OpCode = unbox <| fieldInfo.GetValue(null)
-            Arg = None
+            Arg = Option.map box argName
             ResultType = typeof<int>.Assembly.GetType(resultTypeName, true)
             Stack = stack
         }
@@ -90,7 +90,7 @@ module internal CompilerImpl =
         blockRef := makeBlock funcEnv body
         id, func
 
-    and makeBlock (env : Env<'a>) (exprs : Expr<'a> list) : Block<'a> =
+    and makeBlock (parentEnv : Env<'a>) (exprs : Expr<'a> list) : Block<'a> =
         let rec addToBlock
             (block : Block<'a>) 
             (exprs : Expr<'a> list) 
@@ -101,7 +101,7 @@ module internal CompilerImpl =
                 let name, value = 
                     match values with
                     | [Atom(_, name); value] ->
-                        let var = { DeclEnv = env
+                        let var = { DeclEnv = block.Env
                                     InitExpr = value }
 
                         name, Var(nextDeclId (), var)
@@ -113,7 +113,7 @@ module internal CompilerImpl =
                             | _ -> failwith "expected atom"
 
                         let paramNames = List.map nameOfAtom atoms
-                        let id, func = makeFunc env name paramNames body
+                        let id, func = makeFunc block.Env name paramNames body
                         name, Func(id, func)
 
                     | _ ->
@@ -121,12 +121,13 @@ module internal CompilerImpl =
 
                 match block with
                 | { Body = [] } ->
-                    let env = { block.Env with Values = Map.add name value env.Values }
+                    let env = block.Env
+                    let env = { env with Values = Map.add name value env.Values }
                     tail |> addToBlock { block with Env = env }
 
                 | _ ->
-                    let ienv = { env with Parent = Some env
-                                          Values = Map.ofList [(name, value)] }
+                    let ienv = { block.Env with Parent = Some block.Env
+                                                Values = Map.ofList [(name, value)] }
 
                     let iblock = tail |> addToBlock { Block.empty with Env = ienv }
                     { block with Body = block.Body @ [Block iblock] }
@@ -154,7 +155,7 @@ module internal CompilerImpl =
             | [] ->
                 block
 
-        addToBlock { Block.empty with Env = env } exprs
+        addToBlock { Block.empty with Env = parentEnv } exprs
 
     let rec lookup (name : string) (env : Env<'a>) : EnvValue<'a> =
         match Map.tryFind name env.Values, env.Parent with
@@ -347,12 +348,6 @@ module internal CompilerImpl =
         emitBlock !ilFunc.Func.Block
         g.Emit(OpCodes.Ret)
 
-    let wrap2 (f : 'a -> 'b -> 'c) : MethodInfo =
-        (new System.Func<'a, 'b, 'c>(f)).Method
-
-    let wrap3 (f : 'a -> 'b -> 'c -> 'd) : MethodInfo =
-        (new System.Func<'a, 'b, 'c, 'd>(f)).Method
-
 open CompilerImpl
 
 module Compiler =
@@ -360,10 +355,6 @@ module Compiler =
         let main =
             let values =
                 ["Console.WriteLine", NetFunc <| typeof<Console>.GetMethod("WriteLine", Array.empty)
-                 "+",                 NetFunc <| wrap2(fun a b -> a + b)
-                 "-",                 NetFunc <| wrap2(fun a b -> a - b)
-                 "*",                 NetFunc <| wrap2(fun a b -> a * b)
-                 "/",                 NetFunc <| wrap2(fun a b -> a / b)
                  "if",                IfFunc]
                 |> Map.ofList
 
