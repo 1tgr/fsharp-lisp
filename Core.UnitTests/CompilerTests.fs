@@ -33,7 +33,7 @@ type CompilerTests() =
 
     [<Test>]
     member this.asm_Arg_Stack() =
-        evalVoid @"(.asm (call System.Console.WriteLine) System.Void ""hello"")"
+        eval @"(.asm (call System.Char.ToUpperInvariant) System.Char ""x"")" |> shouldEqual 'X'
 
     [<Test>]
     member this.givenNonTailRecursiveFunction_ShouldNotTailCall() =
