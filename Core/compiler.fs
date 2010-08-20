@@ -5,17 +5,10 @@ open System.IO
 open System.Reflection
 open System.Reflection.Emit
 open System.Threading
+open Tim.Lisp.Core.Asm
 open Tim.Lisp.Core.Syntax
 
 module internal CompilerImpl =
-    type Asm<'a> =
-        {
-            OpCode : OpCode
-            Operand : obj option
-            ResultType : Type
-            Stack : Expr<'a> list
-        }
-
     type DeclId = int
 
     type Block<'a> =
@@ -25,8 +18,7 @@ module internal CompilerImpl =
         }
         static member empty : Block<'a> = { Env = Env.empty; Body = List.empty }
 
-    and Stmt<'a> = Asm of Asm<'a>
-                 | Block of Block<'a>
+    and Stmt<'a> = Block of Block<'a>
                  | Expr of Expr<'a>
 
     and Func<'a> =
@@ -58,85 +50,6 @@ module internal CompilerImpl =
     let nextDeclId : unit -> DeclId =
         let id = ref 0
         fun () -> Interlocked.Increment(id)
-
-    let parseAsmOperand (opCode : OpCode) (operand : Expr<_> option) : obj option =
-        match opCode.OperandType with
-        | OperandType.InlineMethod ->
-            match operand with
-            | Some (Atom(_, name)) ->
-                let typeName, methodName =
-                    match name.LastIndexOf('.') with
-                    | -1 -> failwith "expected type.method"
-                    | index -> name.Substring(0, index), name.Substring(index + 1)
-
-                let t = Type.GetType(typeName, true)
-                Some <| box (t.GetMethod(methodName))
-
-            | o -> failwithf "expected a method name, not %A" o
-
-        | OperandType.InlineI ->
-            match operand with
-            | Some (Int(_, n)) -> Some <| box n
-            | o -> failwithf "expected an integer, not %A" o
-
-        | OperandType.InlineI8 ->
-            match operand with
-            | Some (Int(_, n)) -> Some <| box (byte n)
-            | o -> failwithf "expected an integer, not %A" o
-
-        | OperandType.InlineR ->
-            match operand with
-            | Some (Float(_, n)) -> Some <| box n
-            | Some (Int(_, n)) -> Some <| box (float n)
-            | o -> failwithf "expected a number, not %A" o
-
-        | OperandType.InlineNone ->
-            match operand with
-            | Some o -> failwithf "didn't expect operand %A" o
-            | None -> None
-
-        | OperandType.InlineString ->
-            match operand with
-            | Some (String(_, s)) -> Some <| box s
-            | o -> failwithf "expected a string, not %A" o
-
-        | OperandType.InlineType ->
-            match operand with
-            | Some (Atom(_, name)) ->
-                let t = Type.GetType(name, true)
-                Some <| box t
-
-            | o -> failwithf "expected a type name, not %A" o
-
-        | OperandType.InlineBrTarget
-        | OperandType.InlineField
-        | OperandType.InlineSig
-        | OperandType.InlineSwitch
-        | OperandType.InlineTok
-        | OperandType.InlineVar
-        | OperandType.ShortInlineBrTarget
-        | OperandType.ShortInlineI
-        | OperandType.ShortInlineR
-        | OperandType.ShortInlineVar
-        | _ -> failwith "asm operands of type %A are not supported" opCode.OperandType
-
-    let makeAsm (opCodeName : string) (operand : Expr<_> option) (resultTypeName : string) (stack : Expr<_> list) : Asm<_> =
-        let fieldInfo = 
-            typeof<OpCodes>.GetField(
-                opCodeName.Replace(".", "_"), 
-                BindingFlags.Public ||| BindingFlags.Static ||| BindingFlags.IgnoreCase)
-
-        if fieldInfo = null then
-            failwithf "invalid opcode %s" opCodeName
-
-        let opCode : OpCode = unbox <| fieldInfo.GetValue(null)
-
-        {
-            OpCode = opCode
-            Operand = parseAsmOperand opCode operand
-            ResultType = typeof<int>.Assembly.GetType(resultTypeName, true)
-            Stack = stack
-        }
 
     let rec makeFunc (env : Env<_>) (name : string) (paramNames : string list) (body : Expr<_> list) : DeclId * Func<_> =
         let blockRef = ref Block.empty
@@ -195,20 +108,6 @@ module internal CompilerImpl =
                     let iblock = tail |> addToBlock { Block.empty with Env = ienv }
                     { block with Body = block.Body @ [Block iblock] }
 
-            | List(_, Atom(_, ".asm") :: values) :: tail ->
-                let asm =
-                    match values with
-                    | Atom(_, opCodeName) :: Atom(_, resultTypeName) :: stack ->
-                        makeAsm opCodeName None resultTypeName stack
-
-                    | List(_, [Atom(_, opCodeName); operand]) :: Atom(_, resultTypeName) :: stack ->
-                        makeAsm opCodeName (Some operand) resultTypeName stack
-
-                    | _ ->
-                        failwithf ".asm expected at least 3 values, not %A" values
-
-                tail |> addToBlock { block with Body = block.Body @ [Asm asm] }
-
             | head :: tail ->
                 tail |> addToBlock { block with Body = block.Body @ [Expr head] }
 
@@ -237,6 +136,9 @@ module internal CompilerImpl =
         | Int _ ->
             typeof<int>
 
+        | List(_, Atom(_, ".asm") :: args) ->
+            (parseAsm args).ResultType
+
         | List(_, Atom(_, name) :: args) ->
             match lookup name env with
             | Func(_, func) ->
@@ -264,7 +166,6 @@ module internal CompilerImpl =
     and blockType (block : Block<_>) : Type =
         match List.rev block.Body with
         | [] -> typeof<Void>
-        | Asm asm :: _ -> asm.ResultType
         | Block block :: _ -> blockType block
         | Expr expr :: _ -> exprType block.Env expr
 
@@ -314,11 +215,24 @@ module internal CompilerImpl =
     let emitFunc (ilFuncs : Map<DeclId, ILFunction<'a>>) (ilFunc : ILFunction<'a>) : unit =
         let g = ilFunc.Generator
 
-        let rec call (mi : MethodInfo) (env : Env<_>) (args : Expr<_> list) : unit =
+        let rec emitCall (mi : MethodInfo) (env : Env<_>) (args : Expr<_> list) : unit =
             for arg in args do
                 emitExpr env arg
 
             g.Emit(OpCodes.Call, mi)
+
+        and emitAsm (env : Env<_>) (asm : Asm<_>) : unit =
+            for stack in asm.Stack do
+                emitExpr env stack
+
+            let types, args =
+                match asm.Operand with
+                | None -> [| typeof<OpCode> |], [| box asm.OpCode |]
+                | Some o -> [| typeof<OpCode>; o.GetType() |], [| box asm.OpCode; o |]
+
+            match g.GetType().GetMethod("Emit", BindingFlags.Public ||| BindingFlags.Instance, null, types, null) with
+            | null -> failwithf "can't emit operand %A" asm.Operand
+            | mi -> ignore <| mi.Invoke(g, args)
 
         and emitExpr (env : Env<_>) (expr : Expr<_>) : unit =
             try
@@ -335,12 +249,15 @@ module internal CompilerImpl =
                 | Int(_, n) ->
                     g.Emit(OpCodes.Ldc_I4, n)
 
+                | List(_, Atom(_, ".asm") :: args) ->
+                    emitAsm env (parseAsm args)
+
                 | List(_, Atom(_, name) :: args) ->
                     match lookup name env with
                     | Func(id, _) ->
                         match Map.tryFind id ilFuncs with
                         | Some ilFunc ->
-                            call ilFunc.DynamicMethod env args
+                            emitCall ilFunc.DynamicMethod env args
 
                         | None ->
                             failwithf "no ILFunction for name = %s, id = %d" name id
@@ -374,7 +291,7 @@ module internal CompilerImpl =
                             failwith "expected 3 args for if, not %A" args
 
                     | NetFunc mi ->
-                        call mi env args
+                        emitCall mi env args
 
                     | Arg _ | Var _ ->
                         failwith "delegates not yet implemented"
@@ -388,25 +305,11 @@ module internal CompilerImpl =
             with ex ->
                 raise <| InvalidOperationException(sprintf "%s at %A" ex.Message (Expr.annot expr), ex)
 
-        let emitAsm (env : Env<_>) (asm : Asm<_>) : unit =
-            for stack in asm.Stack do
-                emitExpr env stack
-
-            let types, args =
-                match asm.Operand with
-                | None -> [| typeof<OpCode> |], [| box asm.OpCode |]
-                | Some o -> [| typeof<OpCode>; o.GetType() |], [| box asm.OpCode; o |]
-
-            match g.GetType().GetMethod("Emit", BindingFlags.Public ||| BindingFlags.Instance, null, types, null) with
-            | null -> failwithf "can't emit operand %A" asm.Operand
-            | mi -> ignore <| mi.Invoke(g, args)
-
         let rec emitBlock (block : Block<_>) : unit =
             List.iter (emitStmt block.Env) block.Body
 
         and emitStmt (env : Env<_>) (stmt : Stmt<_>) : unit =
             match stmt with
-            | Asm asm -> emitAsm env asm
             | Block block -> emitBlock block
             | Expr expr -> emitExpr env expr
 

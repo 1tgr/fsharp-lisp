@@ -33,7 +33,15 @@ type CompilerTests() =
 
     [<Test>]
     member this.asm_Arg_Stack() =
-        eval @"(.asm (call System.Char.ToUpperInvariant) System.Char ""x"")" |> shouldEqual 'X'
+        eval @"(.asm (call System.Char.ToUpperInvariant) System.Char 88)" |> shouldEqual 'X'
+
+    [<Test>]
+    member this.shouldNestAsm() =
+        eval @"
+(.asm add System.Int32
+    (.asm (ldc.i4 2) System.Int32) 
+    (.asm (ldc.i4 4) System.Int32))" 
+        |> shouldEqual 6
 
     [<Test>]
     member this.givenNonTailRecursiveFunction_ShouldNotTailCall() =
