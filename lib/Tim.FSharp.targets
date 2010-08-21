@@ -1,0 +1,41 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<UsingTask TaskName="Microsoft.Build.Tasks.CreateCSharpManifestResourceName" AssemblyName="Microsoft.Build.Tasks, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a"/>
+	<PropertyGroup>
+		<DefaultLanguageSourceExtension>.fs</DefaultLanguageSourceExtension>
+		<Language>F#</Language>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<DebugSymbols Condition=" '$(DebugType)' == 'none' ">false</DebugSymbols>
+		<DebugType    Condition=" '$(DebugType)' == 'none' "></DebugType>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<CreateManifestResourceNamesDependsOn></CreateManifestResourceNamesDependsOn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<DocFileItem Include="$(DocumentationFile)" Condition="'$(DocumentationFile)' != ''"/>
+	</ItemGroup>
+
+	<Target
+		Name="CoreCompile"
+		Inputs="@(Compile)"
+		Outputs="@(IntermediateAssembly)"
+	>
+		<Exec Command="fsc --out:@(IntermediateAssembly) --target:$(OutputType) --noframework --reference:@(ReferencePath, ' --reference:') @(Compile, ' ')"/>
+	</Target>
+
+	<Target
+		Name="CreateManifestResourceNames">
+	</Target>
+
+	<Import Project="$(MSBuildBinPath)\Microsoft.Common.targets" />
+
+	<PropertyGroup>
+		<AssemblySearchPaths>
+			/Developer/Applications/FSharp-1.9.9.9/bin/gac;
+			$(AssemblySearchPaths)
+		</AssemblySearchPaths>
+	</PropertyGroup>
+</Project>
