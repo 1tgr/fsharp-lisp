@@ -80,7 +80,7 @@
     </Compile>
   </ItemGroup>
   <Import Condition="!$(IsMono)" Project="$(ProgramFiles)\Microsoft F#\v4.0\Microsoft.FSharp.Targets" />
-  <Import Condition=" $(IsMono)" Project="..\lib\Tim.FSharp.targets" />
+  <Import Condition=" $(IsMono)" Project="..\..\..\Tim.FSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 	     Other similar extension points exist, see Microsoft.Common.targets.
 	<Target Name="BeforeBuild">

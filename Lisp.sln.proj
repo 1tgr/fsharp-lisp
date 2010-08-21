@@ -1,0 +1,236 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build" InitialTargets="ValidateSolutionConfiguration">
+  <UsingTask TaskName="CreateTemporaryVCProject" AssemblyName="Microsoft.Build.Tasks, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+  <UsingTask TaskName="ResolveVCProjectOutput" AssemblyName="Microsoft.Build.Tasks, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+  <PropertyGroup>
+    <SolutionDir>.</SolutionDir>
+    <SolutionExt>.sln</SolutionExt>
+    <SolutionFileName>Lisp.sln</SolutionFileName>
+    <SolutionName>Lisp</SolutionName>
+    <SolutionPath>Lisp.sln</SolutionPath>
+  </PropertyGroup>
+  <ItemGroup Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') ">
+    <BuildLevel0 Include="lib\FParsec\Build\VS10\FParsecCS.csproj">
+      <Configuration>Debug</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel0>
+    <BuildLevel1 Include="lib\FParsec\Build\VS10\FParsec.fsproj">
+      <Configuration>Debug</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel1>
+    <BuildLevel2 Include="Core\Core.fsproj">
+      <Configuration>Debug</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel2>
+    <BuildLevel3 Include="Core.UnitTests\Core.UnitTests.fsproj">
+      <Configuration>Debug</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel3>
+    <BuildLevel3 Include="Interactive\Interactive.csproj">
+      <Configuration>Debug</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel3>
+  </ItemGroup>
+  <ItemGroup Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') ">
+    <BuildLevel0 Include="lib\FParsec\Build\VS10\FParsecCS.csproj">
+      <Configuration>Release</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel0>
+    <BuildLevel1 Include="lib\FParsec\Build\VS10\FParsec.fsproj">
+      <Configuration>Release</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel1>
+    <BuildLevel2 Include="Core\Core.fsproj">
+      <Configuration>Release</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel2>
+    <BuildLevel3 Include="Core.UnitTests\Core.UnitTests.fsproj">
+      <Configuration>Release</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel3>
+    <BuildLevel3 Include="Interactive\Interactive.csproj">
+      <Configuration>Release</Configuration>
+      <Platform>AnyCPU</Platform>
+    </BuildLevel3>
+  </ItemGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == '' ">
+    <Configuration>Debug</Configuration>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Platform)' == '' ">
+    <Platform>Any CPU</Platform>
+  </PropertyGroup>
+  <PropertyGroup Condition=" ('$(AspNetConfiguration)' == '') ">
+    <AspNetConfiguration>$(Configuration)</AspNetConfiguration>
+  </PropertyGroup>
+  <PropertyGroup Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') ">
+    <CurrentSolutionConfigurationContents>
+      <SolutionConfiguration xmlns="">
+        <ProjectConfiguration Project="{8EA340D3-E9E0-477E-9AC3-FBFDF3BAD41E}">Debug|AnyCPU</ProjectConfiguration>
+        <ProjectConfiguration Project="{501423C3-8EA5-4E54-8D9C-EF60272B57FA}">Debug|AnyCPU</ProjectConfiguration>
+        <ProjectConfiguration Project="{BE723FEA-19B2-47D8-9760-ECB75C3A7C3F}">Debug|AnyCPU</ProjectConfiguration>
+        <ProjectConfiguration Project="{2556D04B-4590-461B-B7C2-9BE8DD1B9952}">Debug|AnyCPU</ProjectConfiguration>
+        <ProjectConfiguration Project="{AF402994-A6BD-4CAB-9811-957CE3CF09D2}">Debug|AnyCPU</ProjectConfiguration>
+      </SolutionConfiguration>
+    </CurrentSolutionConfigurationContents>
+  </PropertyGroup>
+  <PropertyGroup Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') ">
+    <CurrentSolutionConfigurationContents>
+      <SolutionConfiguration xmlns="">
+        <ProjectConfiguration Project="{8EA340D3-E9E0-477E-9AC3-FBFDF3BAD41E}">Release|AnyCPU</ProjectConfiguration>
+        <ProjectConfiguration Project="{501423C3-8EA5-4E54-8D9C-EF60272B57FA}">Release|AnyCPU</ProjectConfiguration>
+        <ProjectConfiguration Project="{BE723FEA-19B2-47D8-9760-ECB75C3A7C3F}">Release|AnyCPU</ProjectConfiguration>
+        <ProjectConfiguration Project="{2556D04B-4590-461B-B7C2-9BE8DD1B9952}">Release|AnyCPU</ProjectConfiguration>
+        <ProjectConfiguration Project="{AF402994-A6BD-4CAB-9811-957CE3CF09D2}">Release|AnyCPU</ProjectConfiguration>
+      </SolutionConfiguration>
+    </CurrentSolutionConfigurationContents>
+  </PropertyGroup>
+  <Target Name="ValidateSolutionConfiguration">
+    <Error Text="Invalid solution configuration and platform: &quot;$(Configuration)|$(Platform)&quot;." Condition="('$(CurrentSolutionConfigurationContents)' == '') and ('$(SkipInvalidConfigurations)' != 'true')" />
+    <Warning Text="Invalid solution configuration and platform: &quot;$(Configuration)|$(Platform)&quot;." Condition="('$(CurrentSolutionConfigurationContents)' == '') and ('$(SkipInvalidConfigurations)' == 'true')" />
+    <Message Text="Building solution configuration &quot;$(Configuration)|$(Platform)&quot;." Condition="'$(CurrentSolutionConfigurationContents)' != ''" />
+  </Target>
+  <Target Name="GetFrameworkPath">
+    <GetFrameworkPath>
+      <Output TaskParameter="Path" PropertyName="TargetFrameworkPath" />
+    </GetFrameworkPath>
+  </Target>
+  <Target Name="FParsec" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="FParsecCS">
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsec.fsproj" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsec.fsproj" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="FParsec:Clean" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="FParsecCS:Clean">
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsec.fsproj" Targets="Clean" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsec.fsproj" Targets="Clean" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="FParsec:Rebuild" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="FParsecCS:Rebuild">
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsec.fsproj" Targets="Rebuild" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsec.fsproj" Targets="Rebuild" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="FParsec:Publish" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="FParsecCS:Publish">
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsec.fsproj" Targets="Publish" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsec.fsproj" Targets="Publish" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="FParsecCS" Condition="'$(CurrentSolutionConfigurationContents)' != ''">
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsecCS.csproj" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsecCS.csproj" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="FParsecCS:Clean" Condition="'$(CurrentSolutionConfigurationContents)' != ''">
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsecCS.csproj" Targets="Clean" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsecCS.csproj" Targets="Clean" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="FParsecCS:Rebuild" Condition="'$(CurrentSolutionConfigurationContents)' != ''">
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsecCS.csproj" Targets="Rebuild" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsecCS.csproj" Targets="Rebuild" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="FParsecCS:Publish" Condition="'$(CurrentSolutionConfigurationContents)' != ''">
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsecCS.csproj" Targets="Publish" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="lib\FParsec\Build\VS10\FParsecCS.csproj" Targets="Publish" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Core" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="FParsec;FParsecCS">
+    <MSBuild Projects="Core\Core.fsproj" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Core\Core.fsproj" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Core:Clean" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="FParsec:Clean;FParsecCS:Clean">
+    <MSBuild Projects="Core\Core.fsproj" Targets="Clean" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Core\Core.fsproj" Targets="Clean" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Core:Rebuild" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="FParsec:Rebuild;FParsecCS:Rebuild">
+    <MSBuild Projects="Core\Core.fsproj" Targets="Rebuild" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Core\Core.fsproj" Targets="Rebuild" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Core:Publish" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="FParsec:Publish;FParsecCS:Publish">
+    <MSBuild Projects="Core\Core.fsproj" Targets="Publish" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Core\Core.fsproj" Targets="Publish" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Core_UnitTests" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="Core;FParsecCS">
+    <MSBuild Projects="Core.UnitTests\Core.UnitTests.fsproj" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Core.UnitTests\Core.UnitTests.fsproj" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Core_UnitTests:Clean" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="Core:Clean;FParsecCS:Clean">
+    <MSBuild Projects="Core.UnitTests\Core.UnitTests.fsproj" Targets="Clean" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Core.UnitTests\Core.UnitTests.fsproj" Targets="Clean" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Core_UnitTests:Rebuild" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="Core:Rebuild;FParsecCS:Rebuild">
+    <MSBuild Projects="Core.UnitTests\Core.UnitTests.fsproj" Targets="Rebuild" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Core.UnitTests\Core.UnitTests.fsproj" Targets="Rebuild" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Core_UnitTests:Publish" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="Core:Publish;FParsecCS:Publish">
+    <MSBuild Projects="Core.UnitTests\Core.UnitTests.fsproj" Targets="Publish" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Core.UnitTests\Core.UnitTests.fsproj" Targets="Publish" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Interactive" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="Core;FParsecCS">
+    <MSBuild Projects="Interactive\Interactive.csproj" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Interactive\Interactive.csproj" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Interactive:Clean" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="Core:Clean;FParsecCS:Clean">
+    <MSBuild Projects="Interactive\Interactive.csproj" Targets="Clean" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Interactive\Interactive.csproj" Targets="Clean" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Interactive:Rebuild" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="Core:Rebuild;FParsecCS:Rebuild">
+    <MSBuild Projects="Interactive\Interactive.csproj" Targets="Rebuild" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Interactive\Interactive.csproj" Targets="Rebuild" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Interactive:Publish" Condition="'$(CurrentSolutionConfigurationContents)' != ''" DependsOnTargets="Core:Publish;FParsecCS:Publish">
+    <MSBuild Projects="Interactive\Interactive.csproj" Targets="Publish" Properties="Configuration=Debug; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Debug') and ('$(Platform)' == 'Any CPU') " />
+    <MSBuild Projects="Interactive\Interactive.csproj" Targets="Publish" Properties="Configuration=Release; Platform=AnyCPU; BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Condition=" ('$(Configuration)' == 'Release') and ('$(Platform)' == 'Any CPU') " />
+  </Target>
+  <Target Name="Build" Condition="'$(CurrentSolutionConfigurationContents)' != ''">
+    <MSBuild Condition="'@(BuildLevel0)' != ''" Projects="@(BuildLevel0)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel0)' != ''" Text="The project '%(SkipLevel0.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel0)' != ''" Text="The project configuration for project '%(MissingConfigLevel0.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel1)' != ''" Projects="@(BuildLevel1)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel1)' != ''" Text="The project '%(SkipLevel1.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel1)' != ''" Text="The project configuration for project '%(MissingConfigLevel1.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel2)' != ''" Projects="@(BuildLevel2)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel2)' != ''" Text="The project '%(SkipLevel2.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel2)' != ''" Text="The project configuration for project '%(MissingConfigLevel2.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel3)' != ''" Projects="@(BuildLevel3)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel3)' != ''" Text="The project '%(SkipLevel3.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel3)' != ''" Text="The project configuration for project '%(MissingConfigLevel3.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <CallTarget Targets="" RunEachTargetSeparately="true" />
+  </Target>
+  <Target Name="Clean" Condition="'$(CurrentSolutionConfigurationContents)' != ''">
+    <MSBuild Condition="'@(BuildLevel0)' != ''" Projects="@(BuildLevel0)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Clean" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel0)' != ''" Text="The project '%(SkipLevel0.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel0)' != ''" Text="The project configuration for project '%(MissingConfigLevel0.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel1)' != ''" Projects="@(BuildLevel1)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Clean" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel1)' != ''" Text="The project '%(SkipLevel1.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel1)' != ''" Text="The project configuration for project '%(MissingConfigLevel1.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel2)' != ''" Projects="@(BuildLevel2)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Clean" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel2)' != ''" Text="The project '%(SkipLevel2.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel2)' != ''" Text="The project configuration for project '%(MissingConfigLevel2.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel3)' != ''" Projects="@(BuildLevel3)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Clean" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel3)' != ''" Text="The project '%(SkipLevel3.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel3)' != ''" Text="The project configuration for project '%(MissingConfigLevel3.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <CallTarget Targets="" RunEachTargetSeparately="true" />
+  </Target>
+  <Target Name="Rebuild" Condition="'$(CurrentSolutionConfigurationContents)' != ''">
+    <MSBuild Condition="'@(BuildLevel0)' != ''" Projects="@(BuildLevel0)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Rebuild" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel0)' != ''" Text="The project '%(SkipLevel0.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel0)' != ''" Text="The project configuration for project '%(MissingConfigLevel0.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel1)' != ''" Projects="@(BuildLevel1)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Rebuild" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel1)' != ''" Text="The project '%(SkipLevel1.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel1)' != ''" Text="The project configuration for project '%(MissingConfigLevel1.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel2)' != ''" Projects="@(BuildLevel2)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Rebuild" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel2)' != ''" Text="The project '%(SkipLevel2.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel2)' != ''" Text="The project configuration for project '%(MissingConfigLevel2.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel3)' != ''" Projects="@(BuildLevel3)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Rebuild" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel3)' != ''" Text="The project '%(SkipLevel3.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel3)' != ''" Text="The project configuration for project '%(MissingConfigLevel3.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <CallTarget Targets="" RunEachTargetSeparately="true" />
+  </Target>
+  <Target Name="Publish" Condition="'$(CurrentSolutionConfigurationContents)' != ''">
+    <MSBuild Condition="'@(BuildLevel0)' != ''" Projects="@(BuildLevel0)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Publish" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel0)' != ''" Text="The project '%(SkipLevel0.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel0)' != ''" Text="The project configuration for project '%(MissingConfigLevel0.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel1)' != ''" Projects="@(BuildLevel1)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Publish" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel1)' != ''" Text="The project '%(SkipLevel1.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel1)' != ''" Text="The project configuration for project '%(MissingConfigLevel1.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel2)' != ''" Projects="@(BuildLevel2)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Publish" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel2)' != ''" Text="The project '%(SkipLevel2.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel2)' != ''" Text="The project configuration for project '%(MissingConfigLevel2.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <MSBuild Condition="'@(BuildLevel3)' != ''" Projects="@(BuildLevel3)" Properties="Configuration=%(Configuration); Platform=%(Platform); BuildingSolutionFile=true; CurrentSolutionConfigurationContents=$(CurrentSolutionConfigurationContents); SolutionDir=$(SolutionDir); SolutionExt=$(SolutionExt); SolutionFileName=$(SolutionFileName); SolutionName=$(SolutionName); SolutionPath=$(SolutionPath)" Targets="Publish" RunEachTargetSeparately="true" />
+    <Message Condition="'@(SkipLevel3)' != ''" Text="The project '%(SkipLevel3.Identity)' is disabled for solution configuration '$(Configuration)|$(Platform)'." />
+    <Warning Condition="'@(MissingConfigLevel3)' != ''" Text="The project configuration for project '%(MissingConfigLevel3.Identity)' corresponding to the solution configuration '$(Configuration)|$(Platform)' was not found." />
+    <CallTarget Targets="" RunEachTargetSeparately="true" />
+  </Target>
+</Project>
