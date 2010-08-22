@@ -23,7 +23,7 @@
 		Inputs="@(Compile)"
 		Outputs="@(IntermediateAssembly)"
 	>
-		<Exec Command="fsc --out:@(IntermediateAssembly) --target:$(OutputType) --noframework --reference:@(ReferencePath, ' --reference:') @(Compile, ' ')"/>
+		<Exec Command="fsc --optimize- --debug+ --tailcalls- --out:@(IntermediateAssembly) --target:$(OutputType) --noframework --reference:@(ReferencePath, ' --reference:') @(Compile, ' ')"/>
 	</Target>
 
 	<Target

@@ -4,15 +4,16 @@ namespace Tim.Lisp.Core
 open System
 open System.Reflection
 open System.Reflection.Emit
-open Tim.Lisp.Core.Syntax
 
 module Asm =
+    open Syntax
+
     type Asm<'a> =
         {
             OpCode : OpCode
             Operand : obj option
             ResultType : Type
-            Stack : Expr<'a> list
+            Stack : 'a list
         }
 
     let parseAsmOperand (opCode : OpCode) (operand : Expr<_> option) : obj option =
@@ -76,7 +77,7 @@ module Asm =
         | OperandType.ShortInlineVar
         | _ -> failwith "asm operands of type %A are not supported" opCode.OperandType
 
-    let makeAsm (opCodeName : string) (operand : Expr<_> option) (resultTypeName : string) (stack : Expr<_> list) : Asm<_> =
+    let makeAsm (opCodeName : string) (operand : Expr<_> option) (resultTypeName : string) (stack : Expr<_> list) : Asm<Expr<_>> =
         let fieldInfo = 
             typeof<OpCodes>.GetField(
                 opCodeName.Replace(".", "_"), 
@@ -94,13 +95,13 @@ module Asm =
             Stack = stack
         }
 
-    let parseAsm (args : Expr<_> list) : Asm<_> =
-        match args with
-        | Atom(_, opCodeName) :: Atom(_, resultTypeName) :: stack ->
-            makeAsm opCodeName None resultTypeName stack
+    let tryParseAsm (expr : Expr<_>) : Asm<Expr<_>> option =
+        match expr with
+        | List(_, Atom(_, ".asm") :: Atom(_, opCodeName) :: Atom(_, resultTypeName) :: stack) ->
+            Some <| makeAsm opCodeName None resultTypeName stack
 
-        | List(_, [Atom(_, opCodeName); operand]) :: Atom(_, resultTypeName) :: stack ->
-            makeAsm opCodeName (Some operand) resultTypeName stack
+        | List(_, Atom(_, ".asm") :: List(_, [Atom(_, opCodeName); operand]) :: Atom(_, resultTypeName) :: stack) ->
+            Some <| makeAsm opCodeName (Some operand) resultTypeName stack
 
         | _ ->
-            failwithf ".asm expected at least 3 values, not %A" args
+            None
