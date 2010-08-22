@@ -61,6 +61,7 @@ module Typed =
         | Func(id, func) -> Func(id, typedFunc func)
         | IfFunc -> IfFunc
         | NetFunc mi -> NetFunc mi
+        | RecursiveFunc(id, paramNames) -> RecursiveFunc(id, paramNames)
         | Var(id, var) -> Var(id, typedVar var)
 
     and typedEnv (env : Env<Syntax.Expr<_>>) : Env<Expr<_>> =
@@ -101,17 +102,22 @@ module Typed =
             | None, Syntax.Atom(_, name) :: args ->
                 match lookup name env with
                 | Func(id, func) ->
-                    // TODO: type inference for recursive functions
-                    //let returnType = blockType func.Block
-                    ApplyFunc(a, typeof<int>, id, List.map (typedExpr env) args)
+                    ApplyFunc(a, blockType (typedBlock !func.Block), id, List.map (typedExpr env) args)
 
                 | IfFunc ->
                     match args with
-                    | [test; ifTrue; ifFalse] -> ApplyIfFunc(a, typedExpr env test, typedExpr env ifTrue, typedExpr env ifFalse)
-                    | _ -> failwith "expected 3 args for if, not %A" args
+                    | [test; ifTrue; ifFalse] ->
+                        ApplyIfFunc(a, typedExpr env test, typedExpr env ifTrue, typedExpr env ifFalse)
+
+                    | _ ->
+                        failwith "expected 3 args for if, not %A" args
 
                 | NetFunc mi ->
                     ApplyNetFunc(a, mi, List.map (typedExpr env) args)
+
+                | RecursiveFunc(id, _) ->
+                    // TODO type inference for recursive functions
+                    ApplyFunc(a, typeof<int>, id, List.map (typedExpr env) args)
 
                 | Arg _ | Var _ ->
                     failwith "delegates not yet implemented"

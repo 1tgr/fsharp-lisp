@@ -33,14 +33,9 @@ module CodeGen =
     let rec makeILFunctionsFromValue (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<_>>) (name : string) (value : EnvValue<_>) : Map<DeclId, ILFunction<_>> =
         match value with
         | Func(id, func) ->
-            if (Map.containsKey id map) then
-                map
-            else
-                let ilFunc = new ILFunction<_>(id, func, typeBuilder, name)
-                let map = Map.add id ilFunc map
-                match List.rev (!func.Block).Body with
-                | lastStmt :: _ -> makeILFunctions typeBuilder map lastStmt
-                | [] -> map
+            let ilFunc = new ILFunction<_>(id, func, typeBuilder, name)
+            let map = Map.add id ilFunc map
+            makeILFunctionsFromEnv typeBuilder map (!func.Block).Env
 
         | _ -> map
 

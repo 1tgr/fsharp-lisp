@@ -34,6 +34,7 @@ module Scoped =
                      | Func of DeclId * Func<'a>
                      | IfFunc
                      | NetFunc of MethodInfo
+                     | RecursiveFunc of DeclId * string list
                      | Var of DeclId * Var<'a>
 
     and Env<'a> =
@@ -54,7 +55,7 @@ module Scoped =
                      Params = paramNames }
 
         let id = nextDeclId()
-        let envValues = (name, Func(id, func)) :: List.mapi (fun i name -> name, Arg i) paramNames
+        let envValues = (name, RecursiveFunc(id, paramNames)) :: List.mapi (fun i name -> name, Arg i) paramNames
 
         let funcEnv = { Parent = Some env
                         Func = id
