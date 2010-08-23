@@ -7,7 +7,8 @@ module Typed =
     open Asm
     open Scoped
 
-    type Expr<'a> = ApplyFunc of 'a * Type * DeclId * Expr<'a> list
+    type Expr<'a> = ApplyEqFunc of 'a * Expr<'a> * Expr<'a>
+                  | ApplyFunc of 'a * Type * DeclId * Expr<'a> list
                   | ApplyIfFunc of 'a * Expr<'a> * Expr<'a> * Expr<'a>
                   | ApplyNetFunc of 'a * MethodInfo * Expr<'a> list
                   | Asm of 'a * Asm<Expr<'a>>
@@ -25,6 +26,7 @@ module Typed =
 
     let rec exprType (expr : Expr<'a>) : Type =
         match expr with
+        | ApplyEqFunc _ -> typeof<bool>
         | ApplyFunc(_, t, _, _) -> t
         | ApplyIfFunc(_, _, ifTrue, _) -> exprType ifTrue
         | ApplyNetFunc(_, mi, _) -> mi.ReturnType
@@ -58,6 +60,7 @@ module Typed =
     and typedValue (value : EnvValue<Syntax.Expr<_>>) : EnvValue<Expr<_>> =
         match value with
         | Arg n -> Arg n
+        | EqFunc -> EqFunc
         | Func(id, func) -> Func(id, typedFunc func)
         | IfFunc -> IfFunc
         | NetFunc mi -> NetFunc mi
@@ -101,6 +104,14 @@ module Typed =
 
             | None, Syntax.Atom(_, name) :: args ->
                 match lookup name env with
+                | EqFunc ->
+                    match args with
+                    | [x; y] ->
+                        ApplyEqFunc(a, typedExpr env x, typedExpr env y)
+
+                    | _ ->
+                        failwith "expected 2 args for =, not %A" args
+
                 | Func(id, func) ->
                     ApplyFunc(a, blockType (typedBlock !func.Block), id, List.map (typedExpr env) args)
 

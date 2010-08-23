@@ -14,6 +14,7 @@ module Compiler =
         let main =
             let values =
                 ["Console.WriteLine", NetFunc <| typeof<Console>.GetMethod("WriteLine", Array.empty)
+                 "=",                 EqFunc
                  "if",                IfFunc]
                 |> Map.ofList
 

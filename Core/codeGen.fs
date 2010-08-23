@@ -71,6 +71,9 @@ module CodeGen =
 
         and emitExpr (expr : Expr<_>) : unit =
             match expr with
+            | ApplyEqFunc(_, x, y) ->
+                failwith "can't call = directly"
+
             | ApplyFunc(_, _, id, args) ->
                 match Map.tryFind id ilFuncs with
                 | Some ilFunc ->
@@ -80,8 +83,8 @@ module CodeGen =
                     failwithf "no ILFunction for id = %d" id
 
             | ApplyIfFunc(_, test, ifTrue, ifFalse) ->
-                match ifTrue with
-                | ApplyFunc(_, _, equalFunc, [left; right]) ->
+                match test with
+                | ApplyEqFunc(_, left, right) ->
                     let eqLabel = g.DefineLabel()
                     let endLabel = g.DefineLabel()
                     emitExpr left

@@ -31,6 +31,7 @@ module Scoped =
         }
 
     and EnvValue<'a> = Arg of int
+                     | EqFunc
                      | Func of DeclId * Func<'a>
                      | IfFunc
                      | NetFunc of MethodInfo
