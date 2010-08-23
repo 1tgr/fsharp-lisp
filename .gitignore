@@ -1,3 +1,4 @@
+*.orig
 *.sln.cache
 *.suo
 *.user
