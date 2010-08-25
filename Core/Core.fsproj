@@ -59,6 +59,7 @@
     <Compile Include="asm.fs" />
     <Compile Include="scoped.fs" />
     <Compile Include="typed.fs" />
+    <Compile Include="controlFlow.fs" />
     <Compile Include="codeGen.fs" />
     <Compile Include="compiler.fs" />
   </ItemGroup>
