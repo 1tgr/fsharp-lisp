@@ -46,6 +46,19 @@ module Scoped =
         }
         static member empty : Env<'a> = { Parent = None; Func = 0; Values = Map.empty }
 
+    let rec foldValue (fn : 'a -> string -> EnvValue<_> -> 'a) (state : 'a) (name : string) (value : EnvValue<_>) : 'a =
+        match value with
+        | Func(id, func) -> foldEnv fn (fn state name value) (!func.Block).Env
+        | _ -> fn state name value
+
+    and foldEnv (fn : 'a -> string -> EnvValue<_> -> 'a) (state : 'a) (env : Env<_>) : 'a =
+        Map.fold (foldValue fn) state env.Values
+
+    and foldStmt (fn : 'a -> string -> EnvValue<_> -> 'a) (state : 'a) (stmt : Stmt<_>) : 'a =
+        match stmt with
+        | Block block -> List.fold (foldStmt fn) (foldEnv fn state block.Env) block.Body
+        | _ -> state
+
     let nextDeclId : unit -> DeclId =
         let id = ref 0
         fun () -> Interlocked.Increment(id)

@@ -9,33 +9,34 @@ module ControlFlow =
 
     type NodeId = int
 
-    type Node<'a>(body : Stmt<'a> list) =
-        member this.Body = body
+    type Node<'a> = Stmt<'a> list
 
-        static member Empty : Node<'a> = new Node<'a>(List.empty)
-
-    type Edge<'a> = IfEqual of 'a * 'a * NodeId * NodeId
+    type Edge<'a> = Always of NodeId
+                  | IfEqual of 'a * 'a * NodeId * NodeId
                   | IfTrue of 'a * NodeId * NodeId
-                  | Always of NodeId
 
     type Graph<'a> =
         {
             Nodes : Map<NodeId, Node<'a>>
             OutEdges : Map<NodeId, Edge<'a>>
         }
-        static member Empty : Graph<'a> = { Nodes = Map.empty; OutEdges = Map.empty }
 
     module Node =
-        let add (stmt : Stmt<_>) (node : Node<_>) : Node<_> =
-            new Node<'a>(node.Body @ [stmt])
+        let empty = List.empty
 
         let singleton (stmt : Stmt<_>) : Node<_> =
-            new Node<'a>([stmt])
+            [stmt]
+
+        let add (stmt : Stmt<_>) (node : Node<_>) : Node<_> =
+            node @ [stmt]
 
     module Graph =
         let makeNodeId =
             let nextNodeId = ref 1
             fun () -> Interlocked.Increment(nextNodeId)
+
+        let empty = { Graph.Nodes = Map.empty
+                      OutEdges = Map.empty }
 
         let addNode (id : NodeId) (node : Node<_>) (graph : Graph<_>) : Graph<_> =
             { graph with Nodes = Map.add id node graph.Nodes }
@@ -43,84 +44,68 @@ module ControlFlow =
         let addEdge (fromId : NodeId) (edge : Edge<'a>) (graph : Graph<_>) : Graph<_> =
             { graph with OutEdges = Map.add fromId edge graph.OutEdges }
 
-        let addIf (ifTrue : 'a) (ifFalse : 'a) (graph : Graph<_>) : NodeId * NodeId * Graph<_> =
-            let ifTrueId,  ifTrueNode =  makeNodeId (), Node.singleton (Expr ifTrue)
-            let ifFalseId, ifFalseNode = makeNodeId (), Node.singleton (Expr ifFalse)
-
-            let graph =
-                graph
-                |> addNode ifTrueId ifTrueNode
-                |> addNode ifFalseId ifFalseNode
-
-            ifTrueId, ifFalseId, graph
-
-    let graph (block : Block<Expr<_>>) : Graph<Expr<_>> * NodeId list =
+    let graph (block : Block<Expr<_>>) : NodeId * NodeId list * Graph<Expr<_>> =
         let rec addToGraph
             (body      : Stmt<_> list)
-            (entryNode : NodeId option)
-            (preds     : NodeId list)
+            (exitNodes : NodeId list)
             (graph     : Graph<_>)
-                       : NodeId option * NodeId list * Graph<_>
+                       : NodeId list * Graph<_>
             =
             match body with
             | [] ->
-                entryNode, preds, graph
+                exitNodes, graph
 
             | head :: tail ->
-                let succ, graph =
-                    match head with
-                    | Expr(ApplyIfFunc(_,  ApplyEqFunc(_, a, b), ifEqual, ifNotEqual)) ->
-                        let eq, neq, graph = Graph.addIf ifEqual ifNotEqual graph
-                        Choice1Of2 (IfEqual(a, b, eq, neq), [eq; neq]), graph
+                match head with
+                | Expr(ApplyIfFunc(_, test, ifTrue, ifFalse)) ->
+                    let t = Graph.makeNodeId ()
+                    let f = Graph.makeNodeId ()
 
-                    | Expr(ApplyIfFunc(_, test, ifTrue, ifFalse)) ->
-                        let t, f, graph = Graph.addIf ifTrue ifFalse graph
-                        Choice1Of2 (IfTrue(test, t, f), [t; f]), graph
+                    let graph =
+                        graph
+                        |> Graph.addNode t (Node.singleton (Expr ifTrue))
+                        |> Graph.addNode f (Node.singleton (Expr ifFalse))
 
-                    | stmt ->
-                        Choice2Of2 stmt, graph
-                
-                match preds, succ with
-                | [], Choice1Of2 (edge, nextPreds) ->
-                    let id = Graph.makeNodeId ()
+                    let edge =
+                        match test with
+                        | ApplyEqFunc(_, a, b) -> IfEqual(a, b, t, f)
+                        | _ -> IfTrue(test, t, f)
+                        
+                    match exitNodes with
+                    | [id] ->
+                        graph
+                        |> Graph.addEdge id edge
+                        |> addToGraph tail [t; f]
 
-                    graph
-                    |> Graph.addNode id Node.Empty
-                    |> Graph.addEdge id edge
-                    |> addToGraph tail nextPreds
+                    | ids ->
+                        let id = Graph.makeNodeId ()
+                        let graph = Graph.addNode id Node.empty graph
 
-                | [id], Choice1Of2 (edge, nextPreds) ->
-                    graph
-                    |> Graph.addEdge id edge
-                    |> addToGraph tail nextPreds
+                        ids
+                        |> List.fold (fun g fromId -> Graph.addEdge fromId (Always id) g) graph
+                        |> Graph.addEdge id edge
+                        |> addToGraph tail [t; f]
 
-                | ids, Choice1Of2 (edge, nextPreds) ->
-                    let id = Graph.makeNodeId ()
-                    let graph = Graph.addNode id Node.Empty graph
+                | stmt ->
+                    match exitNodes with
+                    | [id] ->
+                        graph
+                        |> Graph.addNode id (Node.add stmt graph.Nodes.[id])
+                        |> addToGraph tail [id]
 
-                    ids
-                    |> List.fold (fun g fromId -> Graph.addEdge fromId (Always id) g) graph
-                    |> Graph.addEdge id edge
-                    |> addToGraph tail nextPreds
+                    | ids ->
+                        let id = Graph.makeNodeId ()
+                        let graph = Graph.addNode id (Node.singleton stmt) graph
 
-                | [], Choice2Of2 stmt ->
-                    let id = Graph.makeNodeId ()
+                        ids
+                        |> List.fold (fun g fromId -> Graph.addEdge fromId (Always id) g) graph
+                        |> addToGraph tail [id]
 
-                    graph
-                    |> Graph.addNode id (Node.singleton stmt)
-                    |> addToGraph tail [id]
+        let entryNode = Graph.makeNodeId ()
 
-                | [id], Choice2Of2 stmt ->
-                    graph
-                    |> Graph.addNode id (Node.add stmt graph.Nodes.[id])
-                    |> addToGraph tail [id]
+        let exitNodes, graph =
+            Graph.empty
+            |> Graph.addNode entryNode Node.empty
+            |> addToGraph block.Body [entryNode]
 
-                | ids, Choice2Of2 stmt ->
-                    let id = Graph.makeNodeId ()
-                    let graph = Graph.addNode id (Node.singleton stmt) graph
-
-                    ids
-                    |> List.fold (fun g fromId -> Graph.addEdge fromId (Always id) g) graph
-                    |> addToGraph tail [id]
-
-        addToGraph block.Body [] Graph.Empty
+        entryNode, exitNodes, graph

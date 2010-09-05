@@ -6,6 +6,7 @@ open System.Reflection.Emit
 
 module CodeGen =
     open Asm
+    open ControlFlow
     open Scoped
     open Typed
 
@@ -21,6 +22,12 @@ module CodeGen =
                 blockType !func.Block, 
                 func.Params |> List.map (fun _ -> typeof<int>) |> Array.ofList)
 
+        do
+            let mutable index = 1
+            for name in func.Params do
+                ignore <| dynamicMethod.DefineParameter(index, ParameterAttributes.None, name)
+                index <- index + 1
+
         let generator = dynamicMethod.GetILGenerator()
 
         member this.Id = id
@@ -30,35 +37,37 @@ module CodeGen =
         member this.DynamicMethod = dynamicMethod
         member this.Generator = generator
 
-    let rec makeILFunctionsFromValue (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<_>>) (name : string) (value : EnvValue<_>) : Map<DeclId, ILFunction<_>> =
+    let makeILFunction (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<_>>) (name : string) (value : EnvValue<_>) : Map<DeclId, ILFunction<_>> =
         match value with
         | Func(id, func) ->
-            let ilFunc = new ILFunction<_>(id, func, typeBuilder, name)
-            let map = Map.add id ilFunc map
-            makeILFunctionsFromEnv typeBuilder map (!func.Block).Env
+            let ilFunction = new ILFunction<_>(id, func, typeBuilder, name)
+            Map.add id ilFunction map
 
         | _ -> map
 
-    and makeILFunctionsFromEnv (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<_>>) (env : Env<_>) : Map<DeclId, ILFunction<_>> =
-        Map.fold (makeILFunctionsFromValue typeBuilder) map env.Values
+    let makeLocal (g : ILGenerator) (map : Map<DeclId, LocalBuilder>) (name : string) (value : EnvValue<_>) : Map<DeclId, LocalBuilder> =
+        match value with
+        | Var(id, var) ->
+            let t = exprType var.InitExpr
+            let local = g.DeclareLocal(t)
+            Map.add id local map
 
-    and makeILFunctions (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<_>>) (stmt : Stmt<_>) : Map<DeclId, ILFunction<_>> =
-        match stmt with
-        | Block block -> List.fold (makeILFunctions typeBuilder) (makeILFunctionsFromEnv typeBuilder map block.Env) block.Body
         | _ -> map
 
     let emitFunc (ilFuncs : Map<DeclId, ILFunction<_>>) (ilFunc : ILFunction<_>) : unit =
         let g = ilFunc.Generator
+        let funcBlock = !ilFunc.Func.Block
+        let locals = foldEnv (makeLocal g) Map.empty funcBlock.Env
 
-        let rec emitCall (locals : Map<DeclId, LocalBuilder>) (mi : MethodInfo) (args : Expr<_> list) : unit =
+        let rec emitCall (mi : MethodInfo) (args : Expr<_> list) : unit =
             for arg in args do
-                emitExpr locals arg
+                emitExpr arg
 
             g.Emit(OpCodes.Call, mi)
 
-        and emitAsm (locals : Map<DeclId, LocalBuilder>) (asm : Asm<_>) : unit =
+        and emitAsm (asm : Asm<_>) : unit =
             for stack in asm.Stack do
-                emitExpr locals stack
+                emitExpr stack
 
             let types, args =
                 match asm.Operand with
@@ -69,82 +78,75 @@ module CodeGen =
             | null -> failwithf "can't emit operand %A" asm.Operand
             | mi -> ignore <| mi.Invoke(g, args)
 
-        and emitExpr (locals : Map<DeclId, LocalBuilder>) (expr : Expr<_>) : unit =
+        and emitExpr (expr : Expr<_>) : unit =
             match expr with
-            | ApplyEqFunc(_, x, y) ->
-                failwith "can't call = directly"
+            | ApplyEqFunc(_, x, y) -> failwith "can't call = directly"
 
             | ApplyFunc(_, _, id, args) ->
                 match Map.tryFind id ilFuncs with
-                | Some ilFunc -> emitCall locals ilFunc.DynamicMethod args
+                | Some ilFunc -> emitCall ilFunc.DynamicMethod args
                 | None -> failwithf "no ILFunction for id = %d" id
 
-            | ApplyIfFunc(_, ApplyEqFunc(_, left, right), ifEqual, ifNotEqual) ->
-                let eqLabel = g.DefineLabel()
-                let endLabel = g.DefineLabel()
-                emitExpr locals left
-                emitExpr locals right
-                g.Emit(OpCodes.Beq, eqLabel)
-                emitExpr locals ifNotEqual
-                g.Emit(OpCodes.Br, endLabel)
-                g.MarkLabel(eqLabel)
-                emitExpr locals ifEqual
-                g.MarkLabel(endLabel)
+            | ApplyIfFunc _-> failwith "didn't expect to find ApplyIfFunc in control flow graph"
+            | ApplyNetFunc(_, mi, args) -> emitCall mi args
+            | Asm(_, asm) -> emitAsm asm
+            | Float(_, n) -> g.Emit(OpCodes.Ldc_R4, n)
+            | Int(_, n) -> g.Emit(OpCodes.Ldc_I4, n)
+            | LookupArg(_, _, i) -> g.Emit(OpCodes.Ldarg, i)
+            | LookupVar(_, _, id) -> g.Emit(OpCodes.Ldloc, locals.[id])
+            | String(_, s) -> g.Emit(OpCodes.Ldstr, s)
 
-            | ApplyIfFunc(_, test, ifTrue, ifFalse) ->
-                let elseLabel = g.DefineLabel()
-                let endLabel = g.DefineLabel()
-                emitExpr locals test
-                g.Emit(OpCodes.Brfalse, elseLabel)
-                emitExpr locals ifTrue
-                g.Emit(OpCodes.Br, endLabel)
-                g.MarkLabel(elseLabel)
-                emitExpr locals ifFalse
-                g.MarkLabel(endLabel)
-
-            | ApplyNetFunc(_, mi, args) ->
-                emitCall locals mi args
-
-            | Asm(_, asm) ->
-                emitAsm locals asm
-            
-            | Float(_, n) ->
-                g.Emit(OpCodes.Ldc_R4, n)
-
-            | Int(_, n) ->
-                g.Emit(OpCodes.Ldc_I4, n)
-
-            | LookupArg(_, _, i) ->
-                g.Emit(OpCodes.Ldarg, i)
-
-            | LookupVar(_, _, id) ->
-                match Map.tryFind id locals with
-                | Some local -> g.Emit(OpCodes.Ldloc, local)
-                | None -> failwithf "no LocalBuilder for id = %d" id
-
-            | String(_, s) ->
-                g.Emit(OpCodes.Ldstr, s)
-
-        let emitLocal (locals : Map<DeclId, LocalBuilder>) (name : string) (value : EnvValue<_>) : Map<DeclId, LocalBuilder> =
+        let emitLocal (value : EnvValue<_>) : unit =
             match value with
             | Var(id, var) ->
-                let local = g.DeclareLocal(exprType var.InitExpr)
-                emitExpr locals var.InitExpr
+                let local = locals.[id]
+                emitExpr var.InitExpr
                 g.Emit(OpCodes.Stloc, local)
-                Map.add id local locals
 
             | _ ->
-                locals
+                ()
 
-        let rec emitBlock (locals : Map<DeclId, LocalBuilder>) (block : Block<_>) : unit =
-            let locals = Map.fold emitLocal locals block.Env.Values
-            List.iter (emitStmt locals) block.Body
+        let rec emitBlock (block : Block<_>) : unit =
+            for _, value in Map.toSeq block.Env.Values do
+                emitLocal value
 
-        and emitStmt (locals : Map<DeclId, LocalBuilder>) (stmt : Stmt<_>) : unit =
+            for stmt in block.Body do
+                emitStmt stmt
+
+        and emitStmt (stmt : Stmt<_>) : unit  =
             match stmt with
-            | Block block -> emitBlock locals block
-            | Expr expr -> emitExpr locals expr
+            | Block block ->
+                emitBlock block
 
-        emitBlock Map.empty !ilFunc.Func.Block
-        g.Emit(OpCodes.Ret)
+            | Expr expr ->
+                emitExpr expr
 
+        for _, value in Map.toSeq funcBlock.Env.Values do
+            emitLocal value
+
+        let entryNode, exitNodes, graph = graph !ilFunc.Func.Block
+        let labels = Map.map (fun _ _ -> g.DefineLabel()) graph.Nodes
+
+        for nodeId, node in Map.toSeq graph.Nodes do
+            g.MarkLabel(labels.[nodeId])
+
+            for stmt in node do
+                emitStmt stmt
+
+            match Map.tryFind nodeId graph.OutEdges with
+            | None ->
+                g.Emit(OpCodes.Ret)
+
+            | Some (Always toId) ->
+                g.Emit(OpCodes.Br, labels.[toId])
+
+            | Some (IfEqual(a, b, eqId, neqId)) ->
+                emitExpr a
+                emitExpr b
+                g.Emit(OpCodes.Beq, labels.[eqId])
+                g.Emit(OpCodes.Br, labels.[neqId])
+
+            | Some (IfTrue(test, trueId, falseId)) ->
+                emitExpr test
+                g.Emit(OpCodes.Brtrue, labels.[trueId])
+                g.Emit(OpCodes.Br, labels.[falseId])

@@ -25,9 +25,9 @@ module Compiler =
         let assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.RunAndSave)
         let moduleBuilder = assemblyBuilder.DefineDynamicModule(name.Name + ".dll")
         let typeBuilder = moduleBuilder.DefineType("Program")
-        let ilFuncs = makeILFunctionsFromValue typeBuilder Map.empty "main" main
+        let ilFuncs = foldValue (makeILFunction typeBuilder) Map.empty "main" main
 
-        for (_, ilFunc) in Map.toSeq ilFuncs do
+        for _, ilFunc in Map.toSeq ilFuncs do
             emitFunc ilFuncs ilFunc
 
         let t = typeBuilder.CreateType()
