@@ -63,7 +63,7 @@ type CompilerTests() =
 (factorial 6 1)"
         |> shouldEqual 720
 
-    [<Test; Explicit>]
+    [<Test>]
     member this.givenTailRecursiveFunction_ShouldNotOverflowStack() =
         eval @"
 (define (countTo total acc)
