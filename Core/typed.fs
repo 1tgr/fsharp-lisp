@@ -70,7 +70,9 @@ module Typed =
     and typedEnv (env : Env<Syntax.Expr<_>>) : Env<Expr<_>> =
         { Parent = Option.map typedEnv env.Parent
           Func = env.Func
-          Values = Map.map (fun _ -> typedValue) env.Values }
+          Values = Map.map (fun _ -> typedValue) env.Values
+          Refs = env.Refs
+          Using = env.Using }
 
     and typedStmt (env : Env<Syntax.Expr<_>>) (stmt : Stmt<Syntax.Expr<_>>) : Stmt<_> =
         match stmt with
@@ -98,7 +100,7 @@ module Typed =
         | Syntax.Int(a, n) -> Int(a, n)
 
         | Syntax.List(a, values) ->
-            match tryParseAsm expr, values with
+            match tryParseAsm env.Refs env.Using expr, values with
             | Some asm, _ ->
                 Asm(a, typedAsm env asm)
 

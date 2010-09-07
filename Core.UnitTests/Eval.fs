@@ -6,9 +6,13 @@ open Tim.Lisp.Core
 module Eval =
     let builtins =
         @"
-(define (+ a b) (.asm add System.Int32 a b))
-(define (- a b) (.asm sub System.Int32 a b))
-(define (* a b) (.asm mul System.Int32 a b))"
+(.ref ""nunit.framework.dll"")
+(.using System)
+(.using NUnit.Framework)
+(define (+ a b) (.asm add Int32 a b))
+(define (- a b) (.asm sub Int32 a b))
+(define (* a b) (.asm mul Int32 a b))
+(define (assert-equal a b) (.asm (call Assert.AreEqual Int32 Int32) Void a b))"
         |> Parser.parseString
 
     let eval<'T> s =

@@ -1,5 +1,6 @@
 #light
 namespace Tim.Lisp.Core
+open System
 open System.Reflection
 open System.Threading
 
@@ -13,7 +14,8 @@ module Scoped =
             Env : Env<'a>
             Body : Stmt<'a> list
         }
-        static member empty : Block<'a> = { Env = Env.empty; Body = List.empty }
+        static member empty : Block<'a> = { Env = Env.empty
+                                            Body = List.empty }
 
     and Stmt<'a> = Block of Block<'a>
                  | Expr of 'a
@@ -43,8 +45,14 @@ module Scoped =
             Parent : Env<'a> option
             Func : DeclId
             Values : Map<string, EnvValue<'a>>
+            Refs : Assembly list
+            Using : Set<string>
         }
-        static member empty : Env<'a> = { Parent = None; Func = 0; Values = Map.empty }
+        static member empty : Env<'a> = { Parent = None
+                                          Func = 0
+                                          Values = Map.empty
+                                          Refs = [typeof<Int32>.Assembly; typeof<Uri>.Assembly]
+                                          Using = Set.empty }
 
     let rec foldValue (fn : 'a -> string -> EnvValue<_> -> 'a) (state : 'a) (name : string) (value : EnvValue<_>) : 'a =
         match value with
@@ -71,15 +79,28 @@ module Scoped =
         let id = nextDeclId()
         let envValues = (name, RecursiveFunc(id, paramNames)) :: List.mapi (fun i name -> name, Arg i) paramNames
 
-        let funcEnv = { Parent = Some env
-                        Func = id
-                        Values = Map.ofList envValues }
+        let funcEnv = { env with Parent = Some env
+                                 Func = id
+                                 Values = Map.ofList envValues }
 
         blockRef := makeBlock funcEnv body
         id, func
 
     and makeBlock (parentEnv : Env<Expr<'a>>) (exprs : Expr<'a> list) : Block<Expr<'a>> =
-        let rec addToBlock
+        let rec enterEnv (fn : Env<_> -> Env<_>) (body : Expr<_> list) (block : Block<_>) : Block<_> =
+            match block with
+            | { Body = [] } ->
+                let env = fn block.Env
+                addToBlock { block with Env = env } body
+
+            | _ ->
+                let env = fn { block.Env with Parent = Some block.Env
+                                              Values = Map.empty }
+
+                let iblock = addToBlock { Block.empty with Env = env } body
+                { block with Body = block.Body @ [Block iblock] }
+
+        and addToBlock
             (block : Block<_>) 
             (exprs : Expr<_> list) 
                    : Block<_>
@@ -109,16 +130,31 @@ module Scoped =
 
                 match block with
                 | { Body = [] } ->
-                    let env = block.Env
-                    let env = { env with Values = Map.add name value env.Values }
+                    let env = { block.Env with Values = Map.add name value block.Env.Values }
                     tail |> addToBlock { block with Env = env }
 
                 | _ ->
-                    let ienv = { block.Env with Parent = Some block.Env
-                                                Values = Map.ofList [(name, value)] }
+                    let env = { block.Env with Parent = Some block.Env
+                                               Values = Map.ofList [(name, value)] }
 
-                    let iblock = tail |> addToBlock { Block.empty with Env = ienv }
+                    let iblock = tail |> addToBlock { Block.empty with Env = env }
                     { block with Body = block.Body @ [Block iblock] }
+
+            | List(_, Atom(_, ".ref") :: values) :: tail ->
+                let assembly = 
+                    match values with
+                    | [String(_, filename)] -> Assembly.LoadFrom(filename)
+                    | _ -> failwithf ".ref expected 1 value, not %A" values
+
+                enterEnv (fun env -> { env with Refs = assembly :: env.Refs }) tail block
+
+            | List(_, Atom(_, ".using") :: values) :: tail ->
+                let nspace = 
+                    match values with
+                    | [Atom(_, name)] -> name
+                    | _ -> failwithf ".using expected 1 value, not %A" values
+
+                enterEnv (fun env -> { env with Using = Set.add nspace env.Using }) tail block
 
             | head :: tail ->
                 tail |> addToBlock { block with Body = block.Body @ [Expr head] }

@@ -20,27 +20,33 @@ type CompilerTests() =
         eval "(define number 6) number" |> shouldEqual 6
 
     [<Test>]
+    member this.shouldDefineAndAssertValue() =
+        evalVoid @"
+(define number 6)
+(assert-equal 6 number)"
+
+    [<Test>]
     member this.asm_NoArg_NoStack() =
-        eval "(.asm ldc.i4.0 System.Int32)" |> shouldEqual 0
+        eval "(.asm ldc.i4.0 Int32)" |> shouldEqual 0
 
     [<Test>]
     member this.asm_Arg_NoStack() =
-        eval "(.asm (ldc.i4 6) System.Int32)" |> shouldEqual 6
+        eval "(.asm (ldc.i4 6) Int32)" |> shouldEqual 6
 
     [<Test>]
     member this.asm_NoArg_Stack() =
-        eval "(.asm add System.Int32 2 4)" |> shouldEqual 6
+        eval "(.asm add Int32 2 4)" |> shouldEqual 6
 
     [<Test>]
     member this.asm_Arg_Stack() =
-        eval @"(.asm (call System.Char.ToUpperInvariant) System.Char 88)" |> shouldEqual 'X'
+        eval @"(.asm (call Char.ToUpperInvariant Char) Char 88)" |> shouldEqual 'X'
 
     [<Test>]
     member this.shouldNestAsm() =
         eval @"
-(.asm add System.Int32
-    (.asm (ldc.i4 2) System.Int32) 
-    (.asm (ldc.i4 4) System.Int32))" 
+(.asm add Int32
+    (.asm (ldc.i4 2) Int32) 
+    (.asm (ldc.i4 4) Int32))" 
         |> shouldEqual 6
 
     [<Test>]

@@ -16,92 +16,120 @@ module Asm =
             Stack : 'a list
         }
 
-    let parseAsmOperand (opCode : OpCode) (operand : Expr<_> option) : obj option =
-        match opCode.OperandType with
-        | OperandType.InlineMethod ->
-            match operand with
-            | Some (Atom(_, name)) ->
-                let typeName, methodName =
-                    match name.LastIndexOf('.') with
-                    | -1 -> failwith "expected type.method"
-                    | index -> name.Substring(0, index), name.Substring(index + 1)
+    let tryParseAsm (refs : Assembly list) (using : Set<string>) (expr : Expr<_>) : Asm<Expr<_>> option =
+        let getType (name : string) : Type =
+            let inAssembly (ref : Assembly) : Type option = 
+                using
+                |> Seq.tryPick (fun nspace ->
+                    match ref.GetType(nspace + "." + name, false) with
+                    | null -> None
+                    | t -> Some t)
 
-                let t = Type.GetType(typeName, true)
-                Some <| box (t.GetMethod(methodName))
+            match List.tryPick inAssembly refs with
+            | Some t -> t
+            | None -> failwithf "%s is not a .NET type" name
 
-            | o -> failwithf "expected a method name, not %A" o
+        let getMethod (name : string) (argTypes : Type list) : MethodInfo =
+            let typeName, methodName =
+                match name.LastIndexOf('.') with
+                | -1 -> failwith "expected type.method"
+                | index -> name.Substring(0, index), name.Substring(index + 1)
 
-        | OperandType.InlineI ->
-            match operand with
-            | Some (Int(_, n)) -> Some <| box n
-            | o -> failwithf "expected an integer, not %A" o
+            let t = getType typeName
+            match t.GetMethod(name = methodName,
+                                bindingAttr = (BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static),
+                                binder = null,
+                                types = Array.ofList argTypes,
+                                modifiers = null) with
+            | null -> failwithf "no method on %s matching %s %A" t.FullName methodName argTypes
+            | mi -> mi
 
-        | OperandType.InlineI8 ->
-            match operand with
-            | Some (Int(_, n)) -> Some <| box (byte n)
-            | o -> failwithf "expected an integer, not %A" o
+        let parseOperand (opCode : OpCode) (operands : Expr<_> list) : obj option =
+            match opCode.OperandType with
+            | OperandType.InlineMethod ->
+                match operands with
+                | Atom(_, name) :: types ->
+                    let mi =
+                        types
+                        |> List.map (function
+                            | Atom(_, name) -> getType name
+                            | o -> failwithf "expected a type name, not %A" o)
+                        |> getMethod name
 
-        | OperandType.InlineR ->
-            match operand with
-            | Some (Float(_, n)) -> Some <| box n
-            | Some (Int(_, n)) -> Some <| box (float n)
-            | o -> failwithf "expected a number, not %A" o
+                    Some <| box mi
 
-        | OperandType.InlineNone ->
-            match operand with
-            | Some o -> failwithf "didn't expect operand %A" o
-            | None -> None
+                | o -> failwithf "expected a method name, not %A" o
 
-        | OperandType.InlineString ->
-            match operand with
-            | Some (String(_, s)) -> Some <| box s
-            | o -> failwithf "expected a string, not %A" o
+            | OperandType.InlineI ->
+                match operands with
+                | [Int(_, n)] -> Some <| box n
+                | o -> failwithf "expected an integer, not %A" o
 
-        | OperandType.InlineType ->
-            match operand with
-            | Some (Atom(_, name)) ->
-                let t = Type.GetType(name, true)
-                Some <| box t
+            | OperandType.InlineI8 ->
+                match operands with
+                | [Int(_, n)] -> Some <| box (byte n)
+                | o -> failwithf "expected an integer, not %A" o
 
-            | o -> failwithf "expected a type name, not %A" o
+            | OperandType.InlineR ->
+                match operands with
+                | [Float(_, n)] -> Some <| box n
+                | [Int(_, n)] -> Some <| box (float n)
+                | o -> failwithf "expected a number, not %A" o
 
-        | OperandType.InlineBrTarget
-        | OperandType.InlineField
-        | OperandType.InlineSig
-        | OperandType.InlineSwitch
-        | OperandType.InlineTok
-        | OperandType.InlineVar
-        | OperandType.ShortInlineBrTarget
-        | OperandType.ShortInlineI
-        | OperandType.ShortInlineR
-        | OperandType.ShortInlineVar
-        | _ -> failwith "asm operands of type %A are not supported" opCode.OperandType
+            | OperandType.InlineNone ->
+                match operands with
+                | [] -> None
+                | o -> failwithf "didn't expect operand %A" o
 
-    let makeAsm (opCodeName : string) (operand : Expr<_> option) (resultTypeName : string) (stack : Expr<_> list) : Asm<Expr<_>> =
-        let fieldInfo = 
-            typeof<OpCodes>.GetField(
-                opCodeName.Replace(".", "_"), 
-                BindingFlags.Public ||| BindingFlags.Static ||| BindingFlags.IgnoreCase)
+            | OperandType.InlineString ->
+                match operands with
+                | [String(_, s)] -> Some <| box s
+                | o -> failwithf "expected a string, not %A" o
 
-        if fieldInfo = null then
-            failwithf "invalid opcode %s" opCodeName
+            | OperandType.InlineType ->
+                match operands with
+                | [Atom(_, name)] ->
+                    let t = getType name
+                    Some <| box t
 
-        let opCode : OpCode = unbox <| fieldInfo.GetValue(null)
+                | o -> failwithf "expected a type name, not %A" o
 
-        {
-            OpCode = opCode
-            Operand = parseAsmOperand opCode operand
-            ResultType = typeof<int>.Assembly.GetType(resultTypeName, true)
-            Stack = stack
-        }
+            | OperandType.InlineBrTarget
+            | OperandType.InlineField
+            | OperandType.InlineSig
+            | OperandType.InlineSwitch
+            | OperandType.InlineTok
+            | OperandType.InlineVar
+            | OperandType.ShortInlineBrTarget
+            | OperandType.ShortInlineI
+            | OperandType.ShortInlineR
+            | OperandType.ShortInlineVar
+            | _ -> failwith "asm operands of type %A are not supported" opCode.OperandType
 
-    let tryParseAsm (expr : Expr<_>) : Asm<Expr<_>> option =
+        let makeAsm (opCodeName : string) (operands : Expr<_> list) (resultTypeName : string) (stack : Expr<_> list) : Asm<Expr<_>> =
+            let fieldInfo = 
+                typeof<OpCodes>.GetField(
+                    opCodeName.Replace(".", "_"), 
+                    BindingFlags.Public ||| BindingFlags.Static ||| BindingFlags.IgnoreCase)
+
+            if fieldInfo = null then
+                failwithf "invalid opcode %s" opCodeName
+
+            let opCode : OpCode = unbox <| fieldInfo.GetValue(null)
+
+            {
+                OpCode = opCode
+                Operand = parseOperand opCode operands
+                ResultType = getType resultTypeName
+                Stack = stack
+            }
+
         match expr with
         | List(_, Atom(_, ".asm") :: Atom(_, opCodeName) :: Atom(_, resultTypeName) :: stack) ->
-            Some <| makeAsm opCodeName None resultTypeName stack
+            Some <| makeAsm opCodeName [] resultTypeName stack
 
-        | List(_, Atom(_, ".asm") :: List(_, [Atom(_, opCodeName); operand]) :: Atom(_, resultTypeName) :: stack) ->
-            Some <| makeAsm opCodeName (Some operand) resultTypeName stack
+        | List(_, Atom(_, ".asm") :: List(_, Atom(_, opCodeName) :: operands) :: Atom(_, resultTypeName) :: stack) ->
+            Some <| makeAsm opCodeName operands resultTypeName stack
 
         | _ ->
             None
