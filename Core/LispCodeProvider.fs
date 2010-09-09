@@ -25,7 +25,7 @@ type LispCodeProvider() =
                 try
                     if options.GenerateInMemory
                     then
-                        let (assembly, _, _) = Compiler.compileToMemory (new AssemblyName("output")) statements
+                        let (assembly, _, _) = Compiler.compileToMemory "output" statements
                         results.CompiledAssembly <- assembly
                     else
                         Compiler.compileToFile options.OutputAssembly statements

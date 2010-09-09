@@ -37,7 +37,7 @@ namespace Tim.Lisp.Interactive
 
             try
             {
-                FSharpList<Syntax.Expr<Position>> code = Parse();
+                FSharpList<Syntax.Expr> code = Parse();
                 UpdateTextBoxes(code);
 
                 Action action = (Action) Compiler.compileToDelegate(typeof(Action), code);
@@ -49,7 +49,7 @@ namespace Tim.Lisp.Interactive
             }
         }
 
-        private FSharpList<Syntax.Expr<Position>> Parse()
+        private FSharpList<Syntax.Expr> Parse()
         {
             string text = textBox.SelectedText;
             if (text.Length == 0)
@@ -58,7 +58,7 @@ namespace Tim.Lisp.Interactive
             return Parser.parseString(text);
         }
 
-        private void UpdateTextBoxes<T>(FSharpList<Syntax.Expr<T>> code)
+        private void UpdateTextBoxes(FSharpList<Syntax.Expr> code)
         {
             sexpTextBox.Text = AnyToString(code);
         }

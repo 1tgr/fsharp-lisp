@@ -9,9 +9,6 @@ module Eval =
 (.ref ""nunit.framework.dll"")
 (.using System)
 (.using NUnit.Framework)
-(define (+ a b) (.asm add Int32 a b))
-(define (- a b) (.asm sub Int32 a b))
-(define (* a b) (.asm mul Int32 a b))
 (define (assert-equal a b) (.asm (call Assert.AreEqual Int32 Int32) Void a b))"
         |> Parser.parseString
 

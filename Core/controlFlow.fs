@@ -44,7 +44,7 @@ module ControlFlow =
         let addEdge (fromId : NodeId) (edge : Edge<'a>) (graph : Graph<_>) : Graph<_> =
             { graph with OutEdges = Map.add fromId edge graph.OutEdges }
 
-    let makeGraph (block : Block<Expr<_>>) : NodeId * NodeId list * Graph<Expr<_>> =
+    let makeGraph (block : Block<Expr>) : NodeId * NodeId list * Graph<Expr> =
         let rec addToGraph
             (body      : Stmt<_> list)
             (exitNodes : NodeId list)

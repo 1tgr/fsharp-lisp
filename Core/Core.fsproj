@@ -35,13 +35,27 @@
     <DocumentationFile>
     </DocumentationFile>
   </PropertyGroup>
+  <Import Condition="!$(IsMono)" Project="$(ProgramFiles)\Microsoft F#\v4.0\Microsoft.FSharp.Targets" />
+  <Import Condition=" $(IsMono)" Project="..\lib\Tim.FSharp.targets" />
+  <ItemGroup>
+    <None Include="stdlib.scm">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <Compile Include="syntax.fs" />
+    <Compile Include="parser.fs" />
+    <Compile Include="asm.fs" />
+    <Compile Include="scoped.fs" />
+    <Compile Include="typed.fs" />
+    <Compile Include="controlFlow.fs" />
+    <Compile Include="codeGen.fs" />
+    <Compile Include="compiler.fs" />
+    <Compile Include="LispCodeProvider.fs" />
+  </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
     <Reference Include="FSharp.Core" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\lib\FParsec\Build\VS10\FParsec.fsproj">
       <Name>FParsec</Name>
       <Project>{8ea340d3-e9e0-477e-9ac3-fbfdf3bad41e}</Project>
@@ -53,18 +67,6 @@
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="syntax.fs" />
-    <Compile Include="parser.fs" />
-    <Compile Include="asm.fs" />
-    <Compile Include="scoped.fs" />
-    <Compile Include="typed.fs" />
-    <Compile Include="controlFlow.fs" />
-    <Compile Include="codeGen.fs" />
-    <Compile Include="compiler.fs" />
-  </ItemGroup>
-  <Import Condition="!$(IsMono)" Project="$(ProgramFiles)\Microsoft F#\v4.0\Microsoft.FSharp.Targets" />
-  <Import Condition=" $(IsMono)" Project="..\lib\Tim.FSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 	     Other similar extension points exist, see Microsoft.Common.targets.
 	<Target Name="BeforeBuild">

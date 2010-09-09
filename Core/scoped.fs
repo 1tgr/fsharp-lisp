@@ -1,6 +1,7 @@
 #light
 namespace Tim.Lisp.Core
 open System
+open System.IO
 open System.Reflection
 open System.Threading
 
@@ -51,7 +52,7 @@ module Scoped =
         static member empty : Env<'a> = { Parent = None
                                           Func = 0
                                           Values = Map.empty
-                                          Refs = [typeof<Int32>.Assembly; typeof<Uri>.Assembly]
+                                          Refs = List.empty
                                           Using = Set.empty }
 
     let rec foldValue (fn : 'a -> string -> EnvValue<_> -> 'a) (state : 'a) (name : string) (value : EnvValue<_>) : 'a =
@@ -71,7 +72,7 @@ module Scoped =
         let id = ref 0
         fun () -> Interlocked.Increment(id)
 
-    let rec makeFunc (env : Env<_>) (name : string) (paramNames : string list) (body : Expr<_> list) : DeclId * Func<_> =
+    let rec makeFunc (env : Env<_>) (name : string) (paramNames : string list) (body : Expr list) : DeclId * Func<_> =
         let blockRef = ref Block.empty
         let func = { Block = blockRef
                      Params = paramNames }
@@ -86,8 +87,8 @@ module Scoped =
         blockRef := makeBlock funcEnv body
         id, func
 
-    and makeBlock (parentEnv : Env<Expr<'a>>) (exprs : Expr<'a> list) : Block<Expr<'a>> =
-        let rec enterEnv (fn : Env<_> -> Env<_>) (body : Expr<_> list) (block : Block<_>) : Block<_> =
+    and makeBlock (parentEnv : Env<Expr>) (exprs : Expr list) : Block<Expr> =
+        let rec enterEnv (fn : Env<_> -> Env<_>) (body : Expr list) (block : Block<_>) : Block<_> =
             match block with
             | { Body = [] } ->
                 let env = fn block.Env
@@ -102,7 +103,7 @@ module Scoped =
 
         and addToBlock
             (block : Block<_>) 
-            (exprs : Expr<_> list) 
+            (exprs : Expr list) 
                    : Block<_>
             =
             match exprs with
@@ -143,8 +144,14 @@ module Scoped =
             | List(_, Atom(_, ".ref") :: values) :: tail ->
                 let assembly = 
                     match values with
-                    | [String(_, filename)] -> Assembly.LoadFrom(filename)
-                    | _ -> failwithf ".ref expected 1 value, not %A" values
+                    | [String(_, filename)] ->
+                        if File.Exists(filename) then
+                            Assembly.LoadFrom(filename)
+                        else
+                            Assembly.Load(filename)
+
+                    | _ ->
+                        failwithf ".ref expected 1 value, not %A" values
 
                 enterEnv (fun env -> { env with Refs = assembly :: env.Refs }) tail block
 

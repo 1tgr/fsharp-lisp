@@ -2,23 +2,24 @@
 namespace Tim.Lisp.Core
 open System
 open System.Reflection
+open FParsec
 
 module Typed =
     open Asm
     open Scoped
 
-    type Expr<'a> = ApplyEqFunc of 'a * Expr<'a> * Expr<'a>
-                  | ApplyFunc of 'a * Type * DeclId * Expr<'a> list
-                  | ApplyIfFunc of 'a * Expr<'a> * Expr<'a> * Expr<'a>
-                  | ApplyNetFunc of 'a * MethodInfo * Expr<'a> list
-                  | Asm of 'a * Asm<Expr<'a>>
-                  | Bool of 'a * bool
-                  | Char of 'a * char
-                  | Float of 'a * float
-                  | Int of 'a * int
-                  | LookupArg of 'a * Type * int
-                  | LookupVar of 'a * Type * DeclId
-                  | String of 'a * string
+    type Expr = ApplyEqFunc of Position * Expr * Expr
+              | ApplyFunc of Position * Type * DeclId * Expr list
+              | ApplyIfFunc of Position * Expr * Expr * Expr
+              | ApplyNetFunc of Position * MethodInfo * Expr list
+              | Asm of Position * Asm<Expr>
+              | Bool of Position * bool
+              | Char of Position * char
+              | Float of Position * float
+              | Int of Position * int
+              | LookupArg of Position * Type * int
+              | LookupVar of Position * Type * DeclId
+              | String of Position * string
 
     let rec lookup (name : string) (env : Env<_>) : EnvValue<_> =
         match Map.tryFind name env.Values, env.Parent with
@@ -26,7 +27,7 @@ module Typed =
         | None, Some parent -> lookup name parent
         | None, None -> failwithf "undeclared identifier %s" name
 
-    let rec exprType (expr : Expr<'a>) : Type =
+    let rec exprType (expr : Expr) : Type =
         match expr with
         | ApplyEqFunc _ -> typeof<bool>
         | ApplyFunc(_, t, _, _) -> t
@@ -41,27 +42,27 @@ module Typed =
         | LookupVar(_, t, _) -> t
         | String(_, s) -> typeof<string>
 
-    let rec blockType (block : Block<Expr<_>>) : Type =
+    let rec blockType (block : Block<Expr>) : Type =
         match List.rev block.Body with
         | [] -> typeof<Void>
         | Block block :: _ -> blockType block
         | Expr expr :: _ -> exprType expr
 
-    let rec typedAsm (env : Env<Syntax.Expr<_>>) (asm : Asm<Syntax.Expr<_>>) : Asm<Expr<_>> =
+    let rec typedAsm (env : Env<Syntax.Expr>) (asm : Asm<Syntax.Expr>) : Asm<Expr> =
         { OpCode = asm.OpCode
           Operand = asm.Operand
           ResultType = asm.ResultType
           Stack = List.map (typedExpr env) asm.Stack }
     
-    and typedFunc (func : Func<Syntax.Expr<_>>) : Func<Expr<_>> =
+    and typedFunc (func : Func<Syntax.Expr>) : Func<Expr> =
         { Block = ref (typedBlock !func.Block)
           Params = func.Params }  
 
-    and typedVar (var : Var<Syntax.Expr<_>>) : Var<Expr<_>> =
+    and typedVar (var : Var<Syntax.Expr>) : Var<Expr> =
         { DeclEnv = typedEnv var.DeclEnv
           InitExpr = typedExpr var.DeclEnv var.InitExpr }
 
-    and typedValue (value : EnvValue<Syntax.Expr<_>>) : EnvValue<Expr<_>> =
+    and typedValue (value : EnvValue<Syntax.Expr>) : EnvValue<Expr> =
         match value with
         | Arg n -> Arg n
         | EqFunc -> EqFunc
@@ -71,23 +72,23 @@ module Typed =
         | RecursiveFunc(id, paramNames) -> RecursiveFunc(id, paramNames)
         | Var(id, var) -> Var(id, typedVar var)
 
-    and typedEnv (env : Env<Syntax.Expr<_>>) : Env<Expr<_>> =
+    and typedEnv (env : Env<Syntax.Expr>) : Env<Expr> =
         { Parent = Option.map typedEnv env.Parent
           Func = env.Func
           Values = Map.map (fun _ -> typedValue) env.Values
           Refs = env.Refs
           Using = env.Using }
 
-    and typedStmt (env : Env<Syntax.Expr<_>>) (stmt : Stmt<Syntax.Expr<_>>) : Stmt<_> =
+    and typedStmt (env : Env<Syntax.Expr>) (stmt : Stmt<Syntax.Expr>) : Stmt<Expr> =
         match stmt with
         | Block block -> Block (typedBlock block)
         | Expr expr -> Expr (typedExpr env expr)
 
-    and typedBlock (block : Block<Syntax.Expr<_>>) : Block<Expr<_>> =
+    and typedBlock (block : Block<Syntax.Expr>) : Block<Expr> =
         { Env = typedEnv block.Env
           Body = List.map (typedStmt block.Env) block.Body }
 
-    and typedExpr (env : Env<Syntax.Expr<_>>) (expr : Syntax.Expr<_>) : Expr<_> =
+    and typedExpr (env : Env<Syntax.Expr>) (expr : Syntax.Expr) : Expr =
         match expr with
         | Syntax.Atom(a, "#t") ->
             Bool(a, true)

@@ -17,7 +17,7 @@ module CodeGen =
         }
 
     and ILFunction<'a>(id : DeclId,
-                        func : Func<Expr<'a>>,
+                        func : Func<Expr>,
                         typeBuilder : TypeBuilder, 
                         name : string)
         =
@@ -54,7 +54,7 @@ module CodeGen =
         member this.DynamicMethod = dynamicMethod
         member this.Generator = g
 
-        member this.EmitCall (context : ILContext<_>) (mi : MethodInfo) (args : Expr<_> list) : unit =
+        member this.EmitCall (context : ILContext<_>) (mi : MethodInfo) (args : Expr list) : unit =
             let noTailCall = { context with IsTail = false }
             for arg in args do
                 this.EmitExpr noTailCall arg
@@ -78,7 +78,7 @@ module CodeGen =
             | null -> failwithf "can't emit operand %A" asm.Operand
             | mi -> ignore <| mi.Invoke(g, args)
 
-        member this.EmitExpr (context : ILContext<_>) (expr : Expr<_>) : unit =
+        member this.EmitExpr (context : ILContext<_>) (expr : Expr) : unit =
             match expr with
             | ApplyEqFunc(_, x, y) -> failwith "can't call = directly"
 

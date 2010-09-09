@@ -1,9 +1,10 @@
 ﻿#light
 namespace Tim.Lisp.Core
+open FParsec
 
 module Syntax =
-    type Expr<'a> = Atom of 'a * string
-                  | Float of 'a * float
-                  | Int of 'a * int
-                  | List of 'a * Expr<'a> list
-                  | String of 'a * string
+    type Expr = Atom of Position * string
+              | Float of Position * float
+              | Int of Position * int
+              | List of Position * Expr list
+              | String of Position * string

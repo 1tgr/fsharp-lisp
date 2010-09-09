@@ -10,36 +10,59 @@ module Compiler =
     open Scoped
     open Typed
 
-    let compileToAst (code : Syntax.Expr<_> list) : EnvValue<Expr<_>> =
+    let mainEnv : Env<Syntax.Expr> =
         let values =
             ["Console.WriteLine", NetFunc <| typeof<Console>.GetMethod("WriteLine", Array.empty)
              "=",                 EqFunc
              "if",                IfFunc]
             |> Map.ofList
 
-        let env = { Env.empty with Values = values }
+        { Env.empty with Values = values
+                         Using = Set.singleton "" }
 
-        code
-        |> makeFunc env "main" List.empty
+    let prelude : Syntax.Expr list =
+        Parser.parseFile (Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "stdlib.scm"))
+
+    let compileToAst (code : Syntax.Expr list) : EnvValue<Expr> =
+        prelude @ code
+        |> makeFunc mainEnv "main" List.empty
         |> Func
         |> typedValue
 
-    let compileAstToDelegate (delegateType : Type) (main : EnvValue<Expr<_>>) : Delegate =
-        let name = AssemblyName("DynamicAssembly")
-        let assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.RunAndSave)
-        let moduleBuilder = assemblyBuilder.DefineDynamicModule(name.Name + ".dll")
-        let typeBuilder = moduleBuilder.DefineType("Program")
+    let compileAstToMemory (filename : string) (main : EnvValue<Expr>) : (AssemblyBuilder * Type * MethodInfo) =
+        let name = AssemblyName(Path.GetFileNameWithoutExtension(filename))
+        let assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.RunAndSave, Path.GetDirectoryName(filename))
+        let moduleBuilder = assemblyBuilder.DefineDynamicModule(Path.GetFileName(filename))
+        let typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.Sealed ||| TypeAttributes.Public)
         let ilFuncs = foldValue (makeILFunction typeBuilder) Map.empty "main" main
 
         for _, ilFunc in Map.toSeq ilFuncs do
             emitFunc ilFuncs ilFunc
 
         let t = typeBuilder.CreateType()
-        assemblyBuilder.Save(name.Name + ".dll")
         let methodInfo = t.GetMethod("main", BindingFlags.Public ||| BindingFlags.Static)
+        assemblyBuilder.SetEntryPoint(methodInfo)
+        assemblyBuilder, t, methodInfo
+
+    let compileAstToDelegate (delegateType : Type) (main : EnvValue<Expr>) : Delegate =
+        let _, _, methodInfo = compileAstToMemory "DynamicAssembly" main
         Delegate.CreateDelegate(delegateType, methodInfo)
 
-    let compileToDelegate (delegateType : Type) (code : Syntax.Expr<_> list) : Delegate =
+    let compileAstToFile (filename : string) (main : EnvValue<Expr>) : unit =
+        let assemblyBuilder, _, _ = compileAstToMemory filename main
+        assemblyBuilder.Save(filename)
+
+    let compileToMemory (filename : string) (code : Syntax.Expr list) : (AssemblyBuilder * Type * MethodInfo) =
+        code
+        |> compileToAst
+        |> compileAstToMemory filename
+
+    let compileToDelegate (delegateType : Type) (code : Syntax.Expr list) : Delegate =
         code
         |> compileToAst
         |> compileAstToDelegate delegateType
+
+    let compileToFile (filename : string) (code : Syntax.Expr list) : unit =
+        code
+        |> compileToAst
+        |> compileAstToFile filename

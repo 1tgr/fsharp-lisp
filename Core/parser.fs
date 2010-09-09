@@ -1,6 +1,7 @@
 ﻿#light
 namespace Tim.Lisp.Core
 open System
+open System.Text
 open FParsec
 open FParsec.CharParsers
 open FParsec.Error
@@ -13,11 +14,11 @@ module internal ParserImpl =
     let node (f : (Position * 'a) -> 'c) (p : Parser<'a, 'b>) : Parser<'c, 'b> =
         pipe2 getPosition p (fun a b -> f(a, b))
 
-    let atom : Parser<Expr<Position>, unit> =
+    let atom : Parser<Expr, unit> =
         many1Chars (choice [asciiLetter; digit; anyOf @".!#\$%&|*+-/:<=>?@^_~"]) .>> spaces |> node Atom
 
-    let number : Parser<Expr<Position>, unit> =
-        let numberNode (position : Position) (literal : NumberLiteral) : Expr<Position> =
+    let number : Parser<Expr, unit> =
+        let numberNode (position : Position) (literal : NumberLiteral) : Expr =
             if literal.IsInteger then
                 Int(position, int literal.String)
             else
@@ -26,22 +27,27 @@ module internal ParserImpl =
         let numberFormat = NumberLiteralOptions.AllowMinusSign ||| NumberLiteralOptions.AllowFraction ||| NumberLiteralOptions.AllowExponent
         pipe2 getPosition (numberLiteral numberFormat "number" .>> spaces) numberNode
 
-    let (expr : Parser<Expr<Position>, unit>, exprRef) =
+    let (expr : Parser<Expr, unit>, exprRef) =
         createParserForwardedToRef ()
 
-    let list : Parser<Expr<Position>, unit> =
+    let list : Parser<Expr, unit> =
         ch '(' >>. many expr .>> ch ')' |> node List
 
-    let string : Parser<Expr<Position>, unit> =
+    let string : Parser<Expr, unit> =
         ch '"' >>. manyCharsTill anyChar (ch '"') |> node String
 
     exprRef := choice [number; list; string; atom]
 
-    let prog : Parser<Expr<Position> list, unit> =
+    let prog : Parser<Expr list, unit> =
         spaces >>. many expr .>> eof
 
 module Parser =
-    let parseString (s : string) : Expr<Position> list =
+    let parseString (s : string) : Expr list =
         match runParserOnString ParserImpl.prog () "<<input>>" s with
+        | Success(e, _, _) -> e
+        | Failure(msg, _, _) -> failwith msg
+
+    let parseFile (filename : string) : Expr list =
+        match runParserOnFile ParserImpl.prog () filename Encoding.UTF8 with
         | Success(e, _, _) -> e
         | Failure(msg, _, _) -> failwith msg

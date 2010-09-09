@@ -16,7 +16,7 @@ module Asm =
             Stack : 'a list
         }
 
-    let tryParseAsm (refs : Assembly list) (using : Set<string>) (expr : Expr<_>) : Asm<Expr<_>> option =
+    let tryParseAsm (refs : Assembly list) (using : Set<string>) (expr : Expr) : Asm<Expr> option =
         let getType (name : string) : Type =
             let inAssembly (ref : Assembly) : Type option = 
                 using
@@ -44,7 +44,7 @@ module Asm =
             | null -> failwithf "no method on %s matching %s %A" t.FullName methodName argTypes
             | mi -> mi
 
-        let parseOperand (opCode : OpCode) (operands : Expr<_> list) : obj option =
+        let parseOperand (opCode : OpCode) (operands : Expr list) : obj option =
             match opCode.OperandType with
             | OperandType.InlineMethod ->
                 match operands with
@@ -106,7 +106,7 @@ module Asm =
             | OperandType.ShortInlineVar
             | _ -> failwith "asm operands of type %A are not supported" opCode.OperandType
 
-        let makeAsm (opCodeName : string) (operands : Expr<_> list) (resultTypeName : string) (stack : Expr<_> list) : Asm<Expr<_>> =
+        let makeAsm (opCodeName : string) (operands : Expr list) (resultTypeName : string) (stack : Expr list) : Asm<Expr> =
             let fieldInfo = 
                 typeof<OpCodes>.GetField(
                     opCodeName.Replace(".", "_"), 
