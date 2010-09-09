@@ -26,6 +26,14 @@ type CompilerTests() =
 (assert-equal 6 number)"
 
     [<Test>]
+    member this.shouldDefineAndAssertMacro() =
+        evalVoid @"
+(define-syntax add
+               (syntax-rules () ((add a b)
+                                 (.asm add Int32 a b))))
+(assert-equal 6 (add 3 3))"
+
+    [<Test>]
     member this.asm_NoArg_NoStack() =
         eval "(.asm ldc.i4.0 Int32)" |> shouldEqual 0
 

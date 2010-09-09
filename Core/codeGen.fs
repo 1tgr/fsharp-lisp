@@ -25,7 +25,7 @@ module CodeGen =
             typeBuilder.DefineMethod(
                 name, 
                 MethodAttributes.Public ||| MethodAttributes.Static, 
-                blockType !func.Block, 
+                blockType func.Block, 
                 func.Params |> List.map (fun _ -> typeof<int>) |> Array.ofList)
 
         do
@@ -45,7 +45,7 @@ module CodeGen =
 
             | _ -> map
 
-        let locals = foldEnv makeLocal Map.empty (!func.Block).Env
+        let locals = foldEnv makeLocal Map.empty func.Block.Env
 
         member this.Id = id
         member this.Func = func
@@ -144,7 +144,7 @@ module CodeGen =
 
     let emitFunc (ilFuncs : Map<DeclId, ILFunction<_>>) (ilFunc : ILFunction<_>) : unit =
         let g = ilFunc.Generator
-        let funcBlock = !ilFunc.Func.Block
+        let funcBlock = ilFunc.Func.Block
         let entryNode, _, graph = makeGraph funcBlock
         let labels = Map.map (fun _ _ -> g.DefineLabel()) graph.Nodes
 

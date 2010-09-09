@@ -23,18 +23,16 @@ module Compiler =
     let prelude : Syntax.Expr list =
         Parser.parseFile (Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "stdlib.scm"))
 
-    let compileToAst (code : Syntax.Expr list) : EnvValue<Expr> =
-        prelude @ code
-        |> makeFunc mainEnv "main" List.empty
-        |> Func
-        |> typedValue
+    let compileToAst (code : Syntax.Expr list) : DeclId * Func<Expr> =
+        let id, func = makeFunc mainEnv "main" List.empty (prelude @ code)
+        id, typedFunc func
 
-    let compileAstToMemory (filename : string) (main : EnvValue<Expr>) : (AssemblyBuilder * Type * MethodInfo) =
+    let compileAstToMemory (filename : string) (main : DeclId * Func<Expr>) : (AssemblyBuilder * Type * MethodInfo) =
         let name = AssemblyName(Path.GetFileNameWithoutExtension(filename))
         let assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.RunAndSave, Path.GetDirectoryName(filename))
         let moduleBuilder = assemblyBuilder.DefineDynamicModule(Path.GetFileName(filename))
         let typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.Sealed ||| TypeAttributes.Public)
-        let ilFuncs = foldValue (makeILFunction typeBuilder) Map.empty "main" main
+        let ilFuncs = foldValue (makeILFunction typeBuilder) Map.empty "main" (Func main)
 
         for _, ilFunc in Map.toSeq ilFuncs do
             emitFunc ilFuncs ilFunc
@@ -44,11 +42,11 @@ module Compiler =
         assemblyBuilder.SetEntryPoint(methodInfo)
         assemblyBuilder, t, methodInfo
 
-    let compileAstToDelegate (delegateType : Type) (main : EnvValue<Expr>) : Delegate =
+    let compileAstToDelegate (delegateType : Type) (main : DeclId * Func<Expr>) : Delegate =
         let _, _, methodInfo = compileAstToMemory "DynamicAssembly" main
         Delegate.CreateDelegate(delegateType, methodInfo)
 
-    let compileAstToFile (filename : string) (main : EnvValue<Expr>) : unit =
+    let compileAstToFile (filename : string) (main : DeclId * Func<Expr>) : unit =
         let assemblyBuilder, _, _ = compileAstToMemory filename main
         assemblyBuilder.Save(filename)
 
