@@ -12,14 +12,8 @@
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Name>Compiler</Name>
-    <SccProjectName>
-    </SccProjectName>
-    <SccProvider>
-    </SccProvider>
-    <SccAuxPath>
-    </SccAuxPath>
-    <SccLocalPath>
-    </SccLocalPath>
+    <IsMono Condition="'$(OS)' == '' or '$(OS)' == 'Windows_NT'">false</IsMono>
+    <IsMono Condition="'$(OS)' == 'Unix' or '$(OS)' == 'OSX'">true</IsMono>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -63,8 +57,8 @@
       <Private>False</Private>
     </ProjectReference>
   </ItemGroup>
-  <Import Project="$(MSBuildExtensionsPath32)\FSharp\1.0\Microsoft.FSharp.Targets" Condition="!Exists('$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll')" />
-  <Import Project="$(MSBuildExtensionsPath32)\..\Microsoft F#\v4.0\Microsoft.FSharp.Targets" Condition="Exists('$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll')" />
+  <Import Condition="!$(IsMono)" Project="$(ProgramFiles)\Microsoft F#\v4.0\Microsoft.FSharp.Targets" />
+  <Import Condition=" $(IsMono)" Project="..\lib\Tim.FSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 	     Other similar extension points exist, see Microsoft.Common.targets.
 	<Target Name="BeforeBuild">
