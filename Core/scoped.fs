@@ -72,7 +72,53 @@ module Scoped =
         let id = ref 0
         fun () -> Interlocked.Increment(id)
 
-    let rec makeFunc (env : Env<_>) (name : string) (paramNames : string list) (body : Expr list) : DeclId * Func<_> =
+    let parseRef (values : Expr list) (env : Env<_>) : Env<_> =
+        let assembly = 
+            match values with
+            | [String(_, filename)] ->
+                if File.Exists(filename) then
+                    Assembly.LoadFrom(filename)
+                else
+                    Assembly.Load(filename)
+
+            | _ ->
+                failwithf ".ref expected 1 value, not %A" values
+
+        { env with Refs = assembly :: env.Refs }
+
+    let parseUsing (values : Expr list) (env : Env<_>) : Env<_> =
+        let nspace = 
+            match values with
+            | [Atom(_, name)] -> name
+            | _ -> failwithf ".using expected 1 value, not %A" values
+
+        { env with Using = Set.add nspace env.Using }
+
+    let rec parseDefine (values : Expr list) (env : Env<_>) : Env<_> =
+        let name, value = 
+            match values with
+            | [Atom(_, name); value] ->
+                let var = { DeclEnv = env
+                            InitExpr = value }
+
+                name, Var(nextDeclId (), var)
+
+            | List(_, Atom(_, name) :: atoms) :: body ->
+                let nameOfAtom =
+                    function
+                    | Atom(_, name) -> name
+                    | _ -> failwith "expected atom"
+
+                let paramNames = List.map nameOfAtom atoms
+                let id, func = makeFunc env name paramNames body
+                name, Func(id, func)
+
+            | _ ->
+                failwithf "define expected 1 value, not %A" values
+
+        { env with Values = Map.add name value env.Values }
+
+    and makeFunc (env : Env<_>) (name : string) (paramNames : string list) (body : Expr list) : DeclId * Func<_> =
         let blockRef = ref Block.empty
         let func = { Block = blockRef
                      Params = paramNames }
@@ -107,66 +153,10 @@ module Scoped =
                    : Block<_>
             =
             match exprs with
-            | List(_, Atom(_, "define") :: values) :: tail ->
-                let name, value = 
-                    match values with
-                    | [Atom(_, name); value] ->
-                        let var = { DeclEnv = block.Env
-                                    InitExpr = value }
-
-                        name, Var(nextDeclId (), var)
-
-                    | List(_, Atom(_, name) :: atoms) :: body ->
-                        let nameOfAtom =
-                            function
-                            | Atom(_, name) -> name
-                            | _ -> failwith "expected atom"
-
-                        let paramNames = List.map nameOfAtom atoms
-                        let id, func = makeFunc block.Env name paramNames body
-                        name, Func(id, func)
-
-                    | _ ->
-                        failwithf "define expected 1 value, not %A" values
-
-                match block with
-                | { Body = [] } ->
-                    let env = { block.Env with Values = Map.add name value block.Env.Values }
-                    tail |> addToBlock { block with Env = env }
-
-                | _ ->
-                    let env = { block.Env with Parent = Some block.Env
-                                               Values = Map.ofList [(name, value)] }
-
-                    let iblock = tail |> addToBlock { Block.empty with Env = env }
-                    { block with Body = block.Body @ [Block iblock] }
-
-            | List(_, Atom(_, ".ref") :: values) :: tail ->
-                let assembly = 
-                    match values with
-                    | [String(_, filename)] ->
-                        if File.Exists(filename) then
-                            Assembly.LoadFrom(filename)
-                        else
-                            Assembly.Load(filename)
-
-                    | _ ->
-                        failwithf ".ref expected 1 value, not %A" values
-
-                enterEnv (fun env -> { env with Refs = assembly :: env.Refs }) tail block
-
-            | List(_, Atom(_, ".using") :: values) :: tail ->
-                let nspace = 
-                    match values with
-                    | [Atom(_, name)] -> name
-                    | _ -> failwithf ".using expected 1 value, not %A" values
-
-                enterEnv (fun env -> { env with Using = Set.add nspace env.Using }) tail block
-
-            | head :: tail ->
-                tail |> addToBlock { block with Body = block.Body @ [Expr head] }
-
-            | [] ->
-                block
+            | List(_, Atom(_, "define") :: values) :: tail -> enterEnv (parseDefine values) tail block
+            | List(_, Atom(_, ".ref") :: values) :: tail -> enterEnv (parseRef values) tail block
+            | List(_, Atom(_, ".using") :: values) :: tail -> enterEnv (parseUsing values) tail block
+            | head :: tail -> addToBlock { block with Body = block.Body @ [Expr head] } tail
+            | [] -> block
 
         addToBlock { Block.empty with Env = parentEnv } exprs
