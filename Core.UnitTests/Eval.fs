@@ -15,16 +15,17 @@ module Eval =
 (define (assert-equal a b) (.asm (call Assert.AreEqual Int32 Int32) Void a b))"
         |> Parser.parseString
 
+    let ast s =
+        Compiler.compileToAst (builtins @ Parser.parseString s)
+
     let eval<'T> s =
-        let d =
-            builtins @ Parser.parseString s
-            |> Compiler.compileToDelegate typeof<Func<'T>>
+        let a = ast s
+        let d = Compiler.compileAstToDelegate typeof<Func<'T>> a
         let f = d :?> Func<'T>
         f.Invoke()
 
     let evalVoid s =
-        let d =
-            builtins @ Parser.parseString s
-            |> Compiler.compileToDelegate typeof<Action>
+        let a = ast s
+        let d = Compiler.compileAstToDelegate typeof<Action> a
         let a = d :?> Action
         a.Invoke()

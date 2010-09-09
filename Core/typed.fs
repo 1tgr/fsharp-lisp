@@ -12,6 +12,8 @@ module Typed =
                   | ApplyIfFunc of 'a * Expr<'a> * Expr<'a> * Expr<'a>
                   | ApplyNetFunc of 'a * MethodInfo * Expr<'a> list
                   | Asm of 'a * Asm<Expr<'a>>
+                  | Bool of 'a * bool
+                  | Char of 'a * char
                   | Float of 'a * float
                   | Int of 'a * int
                   | LookupArg of 'a * Type * int
@@ -31,6 +33,8 @@ module Typed =
         | ApplyIfFunc(_, _, ifTrue, _) -> exprType ifTrue
         | ApplyNetFunc(_, mi, _) -> mi.ReturnType
         | Asm(_, a) -> a.ResultType
+        | Bool _ -> typeof<bool>
+        | Char _ -> typeof<char>
         | Float _ -> typeof<float>
         | Int _ -> typeof<int>
         | LookupArg(_, t, _) -> t
@@ -85,16 +89,26 @@ module Typed =
 
     and typedExpr (env : Env<Syntax.Expr<_>>) (expr : Syntax.Expr<_>) : Expr<_> =
         match expr with
+        | Syntax.Atom(a, "#t") ->
+            Bool(a, true)
+
+        | Syntax.Atom(a, "#f") ->
+            Bool(a, false)
+
+        | Syntax.Atom(a, "#\space") ->
+            Char(a, ' ')
+
+        | Syntax.Atom(a, "#\newline") ->
+            Char(a, '\n')
+
+        | Syntax.Atom(a, name) when name.Length = 3 && name.StartsWith("#\\") ->
+            Char(a, name.[2])
+
         | Syntax.Atom(a, name) ->
             match lookup name env with
-            | Arg n ->
-                LookupArg(a, typeof<int>, n)
-
-            | Var(id, var) ->
-                LookupVar(a, exprType ((typedVar var).InitExpr), id)
-
-            | _ ->    
-                failwith "delegates not yet implemented"
+            | Arg n -> LookupArg(a, typeof<int>, n)
+            | Var(id, var) -> LookupVar(a, exprType ((typedVar var).InitExpr), id)
+            | _ ->  failwith "delegates not yet implemented"
 
         | Syntax.Float(a, n) -> Float(a, n)
         | Syntax.Int(a, n) -> Int(a, n)

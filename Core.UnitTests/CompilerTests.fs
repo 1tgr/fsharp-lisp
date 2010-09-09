@@ -39,7 +39,9 @@ type CompilerTests() =
 
     [<Test>]
     member this.asm_Arg_Stack() =
-        eval @"(.asm (call Char.ToUpperInvariant Char) Char 88)" |> shouldEqual 'X'
+        eval @"
+(define (char-upcase c) (.asm (call Char.ToUpperInvariant Char) Char c))
+(char-upcase #\x)" |> shouldEqual 'X'
 
     [<Test>]
     member this.shouldNestAsm() =

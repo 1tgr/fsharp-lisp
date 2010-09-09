@@ -90,6 +90,9 @@ module CodeGen =
             | ApplyIfFunc _-> failwith "didn't expect to find ApplyIfFunc in control flow graph"
             | ApplyNetFunc(_, mi, args) -> this.EmitCall context mi args
             | Asm(_, asm) -> this.EmitAsm context asm
+            | Bool(_, true) -> g.Emit(OpCodes.Ldc_I4_1)
+            | Bool(_, false) -> g.Emit(OpCodes.Ldc_I4_0)
+            | Char(_, c) -> g.Emit(OpCodes.Ldc_I4, int16 c)
             | Float(_, n) -> g.Emit(OpCodes.Ldc_R4, n)
             | Int(_, n) -> g.Emit(OpCodes.Ldc_I4, n)
             | LookupArg(_, _, i) -> g.Emit(OpCodes.Ldarg, i)
