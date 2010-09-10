@@ -4,6 +4,7 @@ open System
 open System.Diagnostics
 open System.IO
 open System.Runtime.InteropServices
+open System.Text
 open Microsoft.Win32
 open Xunit
 open Xunit.Extensions
@@ -79,22 +80,39 @@ module CompilerTests =
             match key.GetValue("InstallationFolder") with
             | null -> ()
             | folder ->
-                let peverify = Path.Combine(string folder, "peverify.exe")
-
                 Utils.builtins @ Parser.parseString source
                 |> Compiler.compileToFile "DynamicAssembly.exe"
 
-                let si = new ProcessStartInfo(peverify, "DynamicAssembly.exe")
-                si.CreateNoWindow <- true
-                si.UseShellExecute <- false
-                si.RedirectStandardError <- true
-                si.RedirectStandardOutput <- true
-
                 use proc = new Process()
-                proc.StartInfo <- si
-                ignore <| proc.Start()
-                proc.WaitForExit()
-                Assert.Equal(0, proc.ExitCode)
+
+                proc.StartInfo <-
+                    let peverify = Path.Combine(string folder, "peverify.exe")
+                    let si = new ProcessStartInfo(peverify, "/nologo DynamicAssembly.exe")
+                    si.CreateNoWindow <- true
+                    si.UseShellExecute <- false
+                    si.RedirectStandardError <- true
+                    si.RedirectStandardOutput <- true
+                    si
+
+                let sb = new StringBuilder()
+                let syncRoot = new obj()
+
+                let outputDataReceived (e : DataReceivedEventArgs) =
+                    if not (String.IsNullOrEmpty(e.Data)) then
+                        lock syncRoot <| fun _ ->
+                            if sb.Length > 0 then
+                                ignore <| sb.Append(Environment.NewLine)
+
+                            ignore <| sb.Append(e.Data)
+
+                using (proc.OutputDataReceived.Subscribe outputDataReceived) <|
+                fun _ ->
+                    ignore <| proc.Start()
+                    proc.BeginErrorReadLine()
+                    proc.BeginOutputReadLine()
+                    proc.WaitForExit()
+
+                Assert.Equal("All Classes and Methods in DynamicAssembly.exe Verified.", string sb)
 
     [<Theory; PropertyData("data")>]
     let runs (source : string, result : obj option) =
