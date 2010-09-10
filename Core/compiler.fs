@@ -31,7 +31,12 @@ module Compiler =
 
     let compileAstToMemory (filename : string) (main : EnvValue<Expr>) : (AssemblyBuilder * Type * MethodInfo) =
         let name = AssemblyName(Path.GetFileNameWithoutExtension(filename))
-        let assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.RunAndSave, Path.GetDirectoryName(filename))
+
+        let assemblyBuilder =
+            match Path.GetDirectoryName(filename) with
+            | "" -> AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.RunAndSave)
+            | dir -> AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.RunAndSave, dir)
+
         let moduleBuilder = assemblyBuilder.DefineDynamicModule(Path.GetFileName(filename))
         let typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.Sealed ||| TypeAttributes.Public)
         let ilFuncs = foldValue (makeILFunction typeBuilder) Map.empty "main" main
