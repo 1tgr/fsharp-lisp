@@ -80,7 +80,7 @@ module CompilerTests =
             match key.GetValue("InstallationFolder") with
             | null -> ()
             | folder ->
-                Utils.builtins @ Parser.parseString source
+                Utils.builtins @ Parser.parseString (sprintf "(define (test _) %s) 0" source)
                 |> Compiler.compileToFile "DynamicAssembly.exe"
 
                 use proc = new Process()
