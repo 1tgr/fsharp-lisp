@@ -1,7 +1,7 @@
 ﻿#light
 namespace Tim.Lisp.Core.UnitTests
-open NUnit.Framework
+open Xunit
 
 module Assertion =
     let shouldEqual<'T> (expected : 'T) (actual : 'T) =
-        Assert.AreEqual(box expected, box actual)
+        Assert.Equal(expected, actual)

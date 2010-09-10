@@ -6,10 +6,7 @@ open Tim.Lisp.Core
 module Eval =
     let builtins =
         @"
-(.ref ""nunit.framework.dll"")
-(.using System)
-(.using NUnit.Framework)
-(define (assert-equal a b) (.asm (call Assert.AreEqual Int32 Int32) Void a b))"
+(.using System)"
         |> Parser.parseString
 
     let ast s =
