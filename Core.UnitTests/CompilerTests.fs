@@ -72,23 +72,3 @@ module CompilerTests =
     acc
     (countTo total (+ 1 acc))))
 (countTo 10000000 0)" |> shouldEqual 10000000
-
-    [<Fact>]
-    let shouldSelectMethodZeroArgs() =
-        evalVoid "(Console.WriteLine)"
-
-    [<Fact>]
-    let shouldSelectMethodOneArgReferenceType() =
-        evalVoid "(Console.WriteLine \"hello\")"
-
-    [<Fact>]
-    let shouldSelectMethodOneArgBoxed() =
-        evalVoid "(Console.WriteLine 6)"
-
-    [<Fact>]
-    let shouldSelectMethodParamsArrayReferenceType() =
-        evalVoid "(Console.WriteLine \"hello {0}\" \"world\")"
-
-    [<Fact>]
-    let shouldSelectMethodParamsArrayBoxed() =
-        evalVoid "(Console.WriteLine \"hello {0}\" 6)"
