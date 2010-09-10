@@ -1,13 +1,22 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+  </PropertyGroup>
+
   <ItemGroup>
-    <Project Include="lib/FParsec/Build/VS10/FParsecCS.csproj"/>
-    <Project Include="lib/FParsec/Build/VS10/FParsec.fsproj"/>
-    <Project Include="Core/Core.fsproj"/>
-    <Project Include="Core.UnitTests/Core.UnitTests.fsproj"/>
-    <Project Include="Interactive/Interactive.csproj"/>
+    <Project Include="lib\FParsec\Build\VS10\FParsecCS.csproj"/>
+    <Project Include="lib\FParsec\Build\VS10\FParsec.fsproj"/>
+    <Project Include="Core\Core.fsproj"/>
+    <Project Include="Core.UnitTests\Core.UnitTests.fsproj"/>
+    <Project Include="Compiler\Compiler.fsproj"/>
+    <Project Include="Interactive\Interactive.csproj"/>
   </ItemGroup>
 
   <Target Name="Build">
-    <MSBuild Projects="@(Project)" Targets="Build"/>
+    <MSBuild Projects="@(Project)" Targets="Build" Properties="Configuration=$(Configuration)"/>
+  </Target>
+
+  <Target Name="Test" DependsOnTargets="Build">
+    <Exec Command="lib\xunit-1.6.1\xunit.console.exe bin\$(Configuration)\Tim.Lisp.Core.UnitTests.dll"/>
   </Target>
 </Project>
