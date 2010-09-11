@@ -10,6 +10,7 @@ module Program =
     let main (_ : string array) =
         try
             let code = @"
+(.using System)
 (define (countTo total acc)
   (if (= total acc)
     acc
@@ -19,9 +20,9 @@ module Program =
     acc
     (factorial (- n 1) (* acc n))))
 (define number 6)
-(Console.WriteLine (String.Concat ""{0}"" ""{1}"" "" "" ""{2}"" ""{3}"") number ""!"" ""="" (factorial number 1))
-(Console.WriteLine ""What is your name?"")
-(Console.WriteLine ""Hello, {0}"" (Console.ReadLine))"
+(define (display-int n)
+        (.asm (call Console.WriteLine Int32) Void n))
+(display-int (factorial (countTo number 0) 1))"
 
             let provider = new LispCodeProvider()
             let options = new CompilerParameters()
