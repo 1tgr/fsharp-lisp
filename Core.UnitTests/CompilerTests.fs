@@ -68,15 +68,17 @@ module CompilerTests =
             match key.GetValue("InstallationFolder") with
             | null -> ()
             | folder ->
-                let source = Utils.load name
-                let code = Utils.builtins @ Parser.parseString (sprintf "(define (test _) %s) 0" source)
-                Compiler.compileToFile "DynamicAssembly.exe" code
+                let filename = Path.ChangeExtension(name, ".exe")
+
+                name
+                |> Utils.parse
+                |> Compiler.compileToFile filename
 
                 use proc = new Process()
 
                 proc.StartInfo <-
                     let peverify = Path.Combine(string folder, "peverify.exe")
-                    let si = new ProcessStartInfo(peverify, "/nologo DynamicAssembly.exe")
+                    let si = new ProcessStartInfo(peverify, sprintf "/nologo %s" filename)
                     si.CreateNoWindow <- true
                     si.UseShellExecute <- false
                     si.RedirectStandardError <- true
@@ -101,7 +103,7 @@ module CompilerTests =
                     proc.BeginOutputReadLine()
                     proc.WaitForExit()
 
-                Assert.Equal("All Classes and Methods in DynamicAssembly.exe Verified.", string sb)
+                Assert.Equal(sprintf "All Classes and Methods in %s Verified." filename, string sb)
 
     [<Theory; PropertyData("data")>]
     let runs (name : string) =
