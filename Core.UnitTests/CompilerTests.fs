@@ -13,63 +13,60 @@ open Tim.Lisp.Core
 module Utils =
     let builtins =
         @"
-(.using System)"
+(.ref ""xunit.dll"")
+(.using System)
+(.using Xunit)
+(define (assert-equal expected actual)
+        (.asm (call Assert.Equal Int32 Int32) Void expected actual))"
         |> Parser.parseString
 
-    let delegateType (result : obj option) =
-        match result with
-        | None -> typeof<Action>
-        | Some value -> typedefof<Func<_>>.MakeGenericType(value.GetType())
-
 module CompilerTests =
-    let programs = [ "6",                                               Some <| box 6
-                     "\"hello\"",                                       Some <| box "hello"
+    let programs = [ "(assert-equal 6 6)"
+                     @"(.asm (call Assert.Equal String String) Void ""hello"" ""hello"")"
                      @"(define number 6)
-                       number",                                         Some <| box 6
-                     @"(define number 6)
-                       (.ref ""xunit.dll"")
-                       (.using Xunit)
-                       (.asm (call Assert.Equal Int32 Int32) Void 6 number)", None
-                     "(.asm ldc.i4.0 Int32)",                           Some <| box 0
-                     "(.asm (ldc.i4 6) Int32)",                         Some <| box 6
-                     "(.asm add Int32 2 4)",                            Some <| box 6
-                     @"(define (char-upcase c) (.asm (call Char.ToUpperInvariant Char) Char c))
-                       (char-upcase #\x)",                              Some <| box 'X'
-                     @"(.asm add Int32
-                         (.asm (ldc.i4 2) Int32) 
-                         (.asm (ldc.i4 4) Int32))",                     Some <| box 6
+                       (assert-equal 6 number)"
+                     "(assert-equal 0 (.asm ldc.i4.0 Int32))"
+                     "(assert-equal 6 (.asm (ldc.i4 6) Int32))"
+                     "(assert-equal 6 (.asm add Int32 2 4))"
+                     //@"(define (char-upcase c) (.asm (call Char.ToUpperInvariant Char) Char c))
+                     //  (assert-equal #\X (char-upcase #\x))"
+                     @"(assert-equal
+                         6
+                            (.asm add Int32
+                            (.asm (ldc.i4 2) Int32) 
+                            (.asm (ldc.i4 4) Int32)))"
                      @"(define (factorial n)
                          (if (= n 0) 
                            1 
                            (* n (factorial (- n 1)))))
-                       (factorial 6)",                                  Some <| box 720
+                       (assert-equal 720 (factorial 6))"
                      @"(define (factorial n acc)
                          (if (= n 0)
                            acc
                            (factorial (- n 1) (* acc n))))
-                       (factorial 6 1)",                                Some <| box 720
+                       (assert-equal 720 (factorial 6 1))"
                      @"(define (countTo total acc)
                          (if (= total acc)
                            acc
                            (countTo total (+ 1 acc))))
-                       (countTo 10000000 0)",                           Some <| box 10000000 ]
+                       (assert-equal 10000000 (countTo 10000000 0))" ]
 
-    let data = List.map (fun (a, b) -> [| box a; box b |]) programs
+    let data = List.map (fun a -> [| box a |]) programs
 
     [<Theory; PropertyData("data")>]
-    let parses (source : string, _ : obj option) =
+    let parses (source : string) =
         source
         |> Parser.parseString
         |> ignore
 
     [<Theory; PropertyData("data")>]
-    let compiles (source : string, result : obj option) =
+    let compiles (source : string) =
         Utils.builtins @ Parser.parseString source
-        |> Compiler.compileToDelegate (Utils.delegateType result)
+        |> Compiler.compileToDelegate typeof<Action>
         |> ignore
           
     [<Theory; PropertyData("data")>]
-    let verifies (source : string, _ : obj option) =
+    let verifies (source : string) =
         let version = 
             match RuntimeEnvironment.GetSystemVersion() with
             | "v2.0.50727" -> new Version(3, 5)
@@ -119,15 +116,9 @@ module CompilerTests =
                 Assert.Equal("All Classes and Methods in DynamicAssembly.exe Verified.", string sb)
 
     [<Theory; PropertyData("data")>]
-    let runs (source : string, result : obj option) =
+    let runs (source : string) =
         let d =
             Utils.builtins @ Parser.parseString source
-            |> Compiler.compileToDelegate (Utils.delegateType result)
+            |> Compiler.compileToDelegate typeof<Action>
 
-        match d with
-        | :? Action as a ->
-            a.Invoke()
-
-        | _ ->
-            let actualResult = d.DynamicInvoke()
-            Assert.Equal(Option.get result, actualResult)
+        (d :?> Action).Invoke()
