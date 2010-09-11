@@ -38,6 +38,22 @@
     <DocumentationFile>
     </DocumentationFile>
   </PropertyGroup>
+  <Import Condition="!$(IsMono)" Project="$(ProgramFiles)\Microsoft F#\v4.0\Microsoft.FSharp.Targets" />
+  <Import Condition=" $(IsMono)" Project="..\lib\Tim.FSharp.targets" />
+  <ItemGroup>
+    <EmbeddedResource Include="asm-nested.scm" />
+    <EmbeddedResource Include="asm-no-operand-no-stack.scm" />
+    <EmbeddedResource Include="asm-no-operand-stack.scm" />
+    <EmbeddedResource Include="asm-operand-no-stack.scm" />
+    <EmbeddedResource Include="asm-operand-stack.scm" />
+    <EmbeddedResource Include="number.scm" />
+    <EmbeddedResource Include="recurse-no-tail.scm" />
+    <EmbeddedResource Include="recurse-tail.scm" />
+    <EmbeddedResource Include="recurse-tail-big.scm" />
+    <EmbeddedResource Include="string.scm" />
+    <EmbeddedResource Include="var.scm" />
+    <Compile Include="CompilerTests.fs" />
+  </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
     <Reference Include="FSharp.Core" />
@@ -49,13 +65,6 @@
     <Reference Include="xunit.extensions">
       <HintPath>D:\Data\Git\fsharp-lisp\lib\xunit.extensions.dll</HintPath>
     </Reference>
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Eval.fs" />
-    <Compile Include="Assertion.fs" />
-    <Compile Include="CompilerTests.fs" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Core\Core.fsproj">
       <Name>Core</Name>
       <Project>{be723fea-19b2-47d8-9760-ecb75c3a7c3f}</Project>
@@ -67,8 +76,6 @@
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>
-  <Import Condition="!$(IsMono)" Project="$(ProgramFiles)\Microsoft F#\v4.0\Microsoft.FSharp.Targets" />
-  <Import Condition=" $(IsMono)" Project="..\lib\Tim.FSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 	     Other similar extension points exist, see Microsoft.Common.targets.
 	<Target Name="BeforeBuild">

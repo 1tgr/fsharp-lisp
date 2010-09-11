@@ -11,62 +11,49 @@ open Xunit.Extensions
 open Tim.Lisp.Core
 
 module Utils =
+    type Dummy = Dummy
+
+    let assembly = typeof<Dummy>.Assembly
+    let sampleNames = 
+        assembly.GetManifestResourceNames()
+        |> Array.filter (fun s -> s.EndsWith(".scm"))
+
     let builtins =
         @"
 (.ref ""xunit.dll"")
 (.using System)
 (.using Xunit)
 (define (assert-equal expected actual)
-        (.asm (call Assert.Equal Int32 Int32) Void expected actual))"
+(.asm (call Assert.Equal Int32 Int32) Void expected actual))"
         |> Parser.parseString
+
+    let load (name : string) : string =
+        use stream = assembly.GetManifestResourceStream(name)
+        use reader = new StreamReader(stream)
+        reader.ReadToEnd()
+
+    let parse (name : string) : Syntax.Expr list =
+        let source = load name
+        builtins @ Parser.parseString source
 
 module CompilerTests =
-    let programs = [ "(assert-equal 6 6)"
-                     @"(.asm (call Assert.Equal String String) Void ""hello"" ""hello"")"
-                     @"(define number 6)
-                       (assert-equal 6 number)"
-                     "(assert-equal 0 (.asm ldc.i4.0 Int32))"
-                     "(assert-equal 6 (.asm (ldc.i4 6) Int32))"
-                     "(assert-equal 6 (.asm add Int32 2 4))"
-                     //@"(define (char-upcase c) (.asm (call Char.ToUpperInvariant Char) Char c))
-                     //  (assert-equal #\X (char-upcase #\x))"
-                     @"(assert-equal
-                         6
-                            (.asm add Int32
-                            (.asm (ldc.i4 2) Int32) 
-                            (.asm (ldc.i4 4) Int32)))"
-                     @"(define (factorial n)
-                         (if (= n 0) 
-                           1 
-                           (* n (factorial (- n 1)))))
-                       (assert-equal 720 (factorial 6))"
-                     @"(define (factorial n acc)
-                         (if (= n 0)
-                           acc
-                           (factorial (- n 1) (* acc n))))
-                       (assert-equal 720 (factorial 6 1))"
-                     @"(define (countTo total acc)
-                         (if (= total acc)
-                           acc
-                           (countTo total (+ 1 acc))))
-                       (assert-equal 10000000 (countTo 10000000 0))" ]
-
-    let data = List.map (fun a -> [| box a |]) programs
-
+    let data = Array.map (fun a -> [| box a |]) Utils.sampleNames
+        
     [<Theory; PropertyData("data")>]
-    let parses (source : string) =
-        source
-        |> Parser.parseString
+    let parses (name : string) =
+        name
+        |> Utils.parse
         |> ignore
 
     [<Theory; PropertyData("data")>]
-    let compiles (source : string) =
-        Utils.builtins @ Parser.parseString source
+    let compiles (name : string) =
+        name
+        |> Utils.parse
         |> Compiler.compileToDelegate typeof<Action>
         |> ignore
           
     [<Theory; PropertyData("data")>]
-    let verifies (source : string) =
+    let verifies (name : string) =
         let version = 
             match RuntimeEnvironment.GetSystemVersion() with
             | "v2.0.50727" -> new Version(3, 5)
@@ -81,8 +68,9 @@ module CompilerTests =
             match key.GetValue("InstallationFolder") with
             | null -> ()
             | folder ->
-                Utils.builtins @ Parser.parseString (sprintf "(define (test _) %s) 0" source)
-                |> Compiler.compileToFile "DynamicAssembly.exe"
+                let source = Utils.load name
+                let code = Utils.builtins @ Parser.parseString (sprintf "(define (test _) %s) 0" source)
+                Compiler.compileToFile "DynamicAssembly.exe" code
 
                 use proc = new Process()
 
@@ -116,9 +104,10 @@ module CompilerTests =
                 Assert.Equal("All Classes and Methods in DynamicAssembly.exe Verified.", string sb)
 
     [<Theory; PropertyData("data")>]
-    let runs (source : string) =
+    let runs (name : string) =
         let d =
-            Utils.builtins @ Parser.parseString source
+            name
+            |> Utils.parse
             |> Compiler.compileToDelegate typeof<Action>
 
         (d :?> Action).Invoke()
