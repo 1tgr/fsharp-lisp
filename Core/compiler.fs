@@ -10,7 +10,9 @@ module Compiler =
     open Scoped
     open Typed
 
-    let mainEnv : Env<Syntax.Expr> =
+    let mainEnvId = nextId ()
+    
+    let mainEnv : Env<_, _> =
         let values =
             ["Console.WriteLine", NetFunc <| typeof<Console>.GetMethod("WriteLine", Array.empty)
              "=",                 EqFunc
@@ -23,13 +25,17 @@ module Compiler =
     let prelude : Syntax.Expr list =
         Parser.parseFile (Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "stdlib.scm"))
 
-    let compileToAst (code : Syntax.Expr list) : EnvValue<Expr> =
-        prelude @ code
-        |> makeFunc mainEnv "main" List.empty
-        |> Func
-        |> typedValue
+    let compileToAst (code : Syntax.Expr list) : Map<EnvId, Env<Expr, _>> * EnvValue<Expr, _> =
+        let envs = ref (Map.add mainEnvId mainEnv Map.empty)
 
-    let compileAstToMemory (filename : string) (main : EnvValue<Expr>) : (AssemblyBuilder * Type * MethodInfo) =
+        let ast =
+            prelude @ code
+            |> makeFunc envs mainEnvId "main" List.empty
+            |> Func
+    
+        Map.map (fun _ -> typedEnv !envs) !envs, (typedValue !envs ast)
+
+    let compileAstToMemory (filename : string) (envs : Map<EnvId, Env<_, _>>, main : EnvValue<Expr, _>) : (AssemblyBuilder * Type * MethodInfo) =
         let name = AssemblyName(Path.GetFileNameWithoutExtension(filename))
 
         let assemblyBuilder =
@@ -39,7 +45,7 @@ module Compiler =
 
         let moduleBuilder = assemblyBuilder.DefineDynamicModule(Path.GetFileName(filename))
         let typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.Sealed ||| TypeAttributes.Public)
-        let ilFuncs = foldValue (makeILFunction typeBuilder) Map.empty "main" main
+        let ilFuncs = foldValue envs (makeILFunction envs typeBuilder) Map.empty "main" main
 
         for _, ilFunc in Map.toSeq ilFuncs do
             emitFunc ilFuncs ilFunc
@@ -49,12 +55,12 @@ module Compiler =
         assemblyBuilder.SetEntryPoint(methodInfo)
         assemblyBuilder, t, methodInfo
 
-    let compileAstToDelegate (delegateType : Type) (main : EnvValue<Expr>) : Delegate =
-        let _, _, methodInfo = compileAstToMemory "DynamicAssembly" main
+    let compileAstToDelegate (delegateType : Type) (ast : Map<EnvId, Env<_, _>> * EnvValue<Expr, _>) : Delegate =
+        let _, _, methodInfo = compileAstToMemory "DynamicAssembly" ast
         Delegate.CreateDelegate(delegateType, methodInfo)
 
-    let compileAstToFile (filename : string) (main : EnvValue<Expr>) : unit =
-        let assemblyBuilder, _, _ = compileAstToMemory filename main
+    let compileAstToFile (filename : string) (ast : Map<EnvId, Env<_, _>> * EnvValue<Expr, _>) : unit =
+        let assemblyBuilder, _, _ = compileAstToMemory filename ast
         assemblyBuilder.Save(filename)
 
     let compileToMemory (filename : string) (code : Syntax.Expr list) : (AssemblyBuilder * Type * MethodInfo) =

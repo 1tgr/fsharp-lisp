@@ -24,7 +24,7 @@ module Utils =
 (.using System)
 (.using Xunit)
 (define (assert-equal expected actual)
-(.asm (call Assert.Equal Int32 Int32) Void expected actual))"
+        (.asm (call Assert.Equal Int32 Int32) Void expected actual))"
         |> Parser.parseString
 
     let load (name : string) : string =

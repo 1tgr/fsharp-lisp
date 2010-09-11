@@ -6,6 +6,7 @@ open System.Reflection
 open System.Reflection.Emit
 
 module Asm =
+    open Scoped
     open Syntax
 
     type Asm<'a> =
@@ -16,19 +17,7 @@ module Asm =
             Stack : 'a list
         }
 
-    let tryParseAsm (refs : Assembly list) (using : Set<string>) (expr : Expr) : Asm<Expr> option =
-        let getType (name : string) : Type =
-            let inAssembly (ref : Assembly) : Type option = 
-                using
-                |> Seq.tryPick (fun nspace ->
-                    match ref.GetType(nspace + "." + name, false) with
-                    | null -> None
-                    | t -> Some t)
-
-            match List.tryPick inAssembly refs with
-            | Some t -> t
-            | None -> failwithf "%s is not a .NET type" name
-
+    let tryParseAsm (env : Env<_, _>) (expr : Expr) : Asm<Expr> option =
         let getMethod (name : string) (argTypes : Type list) : MethodInfo =
             let typeName, methodName =
                 match name.LastIndexOf('.') with
@@ -76,7 +65,7 @@ module Asm =
                     else
                         None
 
-            let t = getType typeName
+            let t = getType env typeName
             let methods = Array.choose filterMethod <| t.GetMethods()
             if methods.Length = 0 then
                 failwithf "no method on %s matching %s %A" t.FullName methodName argTypes
@@ -91,7 +80,7 @@ module Asm =
                     let mi =
                         types
                         |> List.map (function
-                            | Atom(_, name) -> getType name
+                            | Atom(_, name) -> getType env name
                             | o -> failwithf "expected a type name, not %A" o)
                         |> getMethod name
 
@@ -128,7 +117,7 @@ module Asm =
             | OperandType.InlineType ->
                 match operands with
                 | [Atom(_, name)] ->
-                    let t = getType name
+                    let t = getType env name
                     Some <| box t
 
                 | o -> failwithf "expected a type name, not %A" o
@@ -159,7 +148,7 @@ module Asm =
             {
                 OpCode = opCode
                 Operand = parseOperand opCode operands
-                ResultType = getType resultTypeName
+                ResultType = getType env resultTypeName
                 Stack = stack
             }
 

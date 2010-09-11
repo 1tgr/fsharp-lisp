@@ -43,8 +43,8 @@
     </None>
     <Compile Include="syntax.fs" />
     <Compile Include="parser.fs" />
-    <Compile Include="asm.fs" />
     <Compile Include="scoped.fs" />
+    <Compile Include="asm.fs" />
     <Compile Include="typed.fs" />
     <Compile Include="controlFlow.fs" />
     <Compile Include="codeGen.fs" />
