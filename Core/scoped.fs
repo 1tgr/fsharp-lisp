@@ -11,6 +11,12 @@ module Scoped =
     type DeclId = int
     type EnvId = int
 
+    type RecursiveFunc<'ty> =
+        {
+            Env : EnvId
+            Params : (string * 'ty) list
+        }
+
     type Block<'a> =
         {
             Env : EnvId
@@ -20,27 +26,27 @@ module Scoped =
     and Stmt<'a> = Block of Block<'a>
                  | Expr of 'a
 
-    and Func<'a, 'ty> =
+    type Func<'a, 'ty> =
         {
             Block : Block<'a>
             Params : (string * 'ty) list
         }
 
-    and Var<'a> =
+    type Var<'a> =
         {
             DeclEnv : EnvId
             InitExpr : 'a
         }
 
-    and EnvValue<'a, 'ty> = Arg of int
-                          | EqFunc
-                          | Func of DeclId * Func<'a, 'ty>
-                          | IfFunc
-                          | NetFunc of MethodInfo
-                          | RecursiveFunc of DeclId * (string * 'ty) list
-                          | Var of DeclId * Var<'a>
+    type EnvValue<'a, 'ty> = Arg of int
+                           | EqFunc
+                           | Func of DeclId * Func<'a, 'ty>
+                           | IfFunc
+                           | NetFunc of MethodInfo
+                           | RecursiveFunc of DeclId * RecursiveFunc<'ty>
+                           | Var of DeclId * Var<'a>
 
-    and Env<'a, 'ty> =
+    type Env<'a, 'ty> =
         {
             Parent : EnvId option
             Func : DeclId
@@ -137,24 +143,29 @@ module Scoped =
         { env with Values = Map.add name value env.Values }
 
     and makeFunc
-        (envs       : Map<EnvId, Env<_, _>> ref)
-        (envId      : EnvId)
-        (name       : string)
-        (paramNames : (string * string) list)
-        (body       : Expr list)
-                    : DeclId * Func<_, string>
+        (envs  : Map<EnvId, Env<_, _>> ref)
+        (envId : EnvId)
+        (name  : string)
+        (parms : (string * string) list)
+        (body  : Expr list)
+               : DeclId * Func<_, string>
         =
         let funcId = nextId ()
-        let envValues = (name, RecursiveFunc(funcId, paramNames)) :: List.mapi (fun i (name, _) -> name, Arg i) paramNames
+        let funcEnvId = nextId ()
+
+        let recursiveFunc = { Env = funcEnvId
+                              Params = parms }
+
+        let envValues = (name, RecursiveFunc(funcId, recursiveFunc)) :: 
+                        List.mapi (fun i (name, _) -> name, Arg i) parms
 
         let funcEnv = { (!envs).[envId] with Parent = Some envId
                                              Func = funcId
                                              Values = Map.ofList envValues }
 
-        let funcEnvId = nextId ()
         envs := Map.add funcEnvId funcEnv !envs
         let block = makeBlock envs funcEnvId body
-        funcId, { Block = block; Params = paramNames }
+        funcId, { Block = block; Params = parms }
 
     and enterEnv
         (envs  : Map<EnvId, Env<_, _>> ref)

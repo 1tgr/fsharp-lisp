@@ -49,30 +49,36 @@ module Typed =
         | Block block :: _ -> blockType block
         | Expr expr :: _ -> exprType expr
 
-    let rec typedAsm (envs : Map<EnvId, Env<Syntax.Expr, _>>) (envId : EnvId) (asm : Asm<Syntax.Expr>) : Asm<Expr> =
+    let typedRecursiveFunc (envs : Map<EnvId, Env<Syntax.Expr, string>>) (func : RecursiveFunc<string>) : RecursiveFunc<Type> =
+        let env = envs.[func.Env]
+        { Env = func.Env
+          Params = List.map (fun (name, ty) -> (name, getType env ty)) func.Params }
+
+    let rec typedAsm (envs : Map<EnvId, Env<Syntax.Expr, string>>) (envId : EnvId) (asm : Asm<Syntax.Expr>) : Asm<Expr> =
         { OpCode = asm.OpCode
           Operand = asm.Operand
           ResultType = asm.ResultType
           Stack = List.map (typedExpr envs envId) asm.Stack }
     
-    and typedFunc (envs : Map<EnvId, Env<Syntax.Expr, _>>) (func : Func<Syntax.Expr, _>) : Func<Expr, _> =
+    and typedFunc (envs : Map<EnvId, Env<Syntax.Expr, string>>) (func : Func<Syntax.Expr, string>) : Func<Expr, Type> =
+        let env = envs.[func.Block.Env]
         { Block = typedBlock envs func.Block
-          Params = func.Params }  
+          Params = List.map (fun (name, ty) -> (name, getType env ty)) func.Params }
 
-    and typedVar (envs : Map<EnvId, Env<Syntax.Expr, _>>) (var : Var<Syntax.Expr>) : Var<Expr> =
+    and typedVar (envs : Map<EnvId, Env<Syntax.Expr, string>>) (var : Var<Syntax.Expr>) : Var<Expr> =
         { DeclEnv = var.DeclEnv
           InitExpr = typedExpr envs var.DeclEnv var.InitExpr }
 
-    and typedStmt (envs : Map<EnvId, Env<Syntax.Expr, _>>) (envId : EnvId) (stmt : Stmt<Syntax.Expr>) : Stmt<Expr> =
+    and typedStmt (envs : Map<EnvId, Env<Syntax.Expr, string>>) (envId : EnvId) (stmt : Stmt<Syntax.Expr>) : Stmt<Expr> =
         match stmt with
         | Block block -> Block (typedBlock envs block)
         | Expr expr -> Expr (typedExpr envs envId expr)
 
-    and typedBlock (envs : Map<EnvId, Env<Syntax.Expr, _>>) (block : Block<Syntax.Expr>) : Block<Expr> =
+    and typedBlock (envs : Map<EnvId, Env<Syntax.Expr, string>>) (block : Block<Syntax.Expr>) : Block<Expr> =
         { Env = block.Env
           Body = List.map (typedStmt envs block.Env) block.Body }
 
-    and typedExpr (envs : Map<EnvId, Env<Syntax.Expr, _>>) (envId : EnvId) (expr : Syntax.Expr) : Expr =
+    and typedExpr (envs : Map<EnvId, Env<Syntax.Expr, string>>) (envId : EnvId) (expr : Syntax.Expr) : Expr =
         match expr with
         | Syntax.Atom(a, "#t") ->
             Bool(a, true)
@@ -140,17 +146,17 @@ module Typed =
 
         | Syntax.String(a, s) -> String(a, s)
 
-    let typedValue (envs : Map<EnvId, Env<Syntax.Expr, _>>) (value : EnvValue<Syntax.Expr, _>) : EnvValue<Expr, _> =
+    let typedValue (envs : Map<EnvId, Env<Syntax.Expr, string>>) (value : EnvValue<Syntax.Expr, string>) : EnvValue<Expr, Type> =
         match value with
         | Arg n -> Arg n
         | EqFunc -> EqFunc
         | Func(id, func) -> Func(id, typedFunc envs func)
         | IfFunc -> IfFunc
         | NetFunc mi -> NetFunc mi
-        | RecursiveFunc(id, paramNames) -> RecursiveFunc(id, paramNames)
+        | RecursiveFunc(id, func) -> RecursiveFunc(id, typedRecursiveFunc envs func)
         | Var(id, var) -> Var(id, typedVar envs var)
 
-    let typedEnv (envs : Map<EnvId, Env<Syntax.Expr, _>>) (env : Env<Syntax.Expr, _>) : Env<Expr, _> =
+    let typedEnv (envs : Map<EnvId, Env<Syntax.Expr, string>>) (env : Env<Syntax.Expr, string>) : Env<Expr, Type> =
         { Parent = env.Parent
           Func = env.Func
           Values = Map.map (fun _ -> typedValue envs) env.Values

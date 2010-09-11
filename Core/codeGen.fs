@@ -17,24 +17,17 @@ module CodeGen =
         }
 
     and ILFunction<'a>(id : DeclId,
-                       func : Func<Expr, string>,
-                       envs : Map<EnvId, Env<Expr, string>>,
+                       func : Func<Expr, Type>,
+                       envs : Map<EnvId, Env<Expr, Type>>,
                        typeBuilder : TypeBuilder, 
                        name : string)
         =
         let dynamicMethod = 
-            let env = envs.[func.Block.Env]
-
-            let types =
-                func.Params
-                |> List.map (snd >> getType env)
-                |> Array.ofList
-
             typeBuilder.DefineMethod(
                 name, 
                 MethodAttributes.Public ||| MethodAttributes.Static, 
                 blockType func.Block, 
-                types)
+                func.Params |> List.map snd |> Array.ofList)
 
         do
             let mutable index = 1
