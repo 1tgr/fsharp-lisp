@@ -69,6 +69,13 @@ module CodeGen =
             for stack in asm.Stack do
                 this.EmitExpr noTailCall stack
 
+            let isCall = asm.OpCode = OpCodes.Call || 
+                         asm.OpCode = OpCodes.Calli || 
+                         asm.OpCode = OpCodes.Callvirt
+
+            if context.IsTail && isCall then
+                g.Emit(OpCodes.Tailcall)
+
             let types, args =
                 match asm.Operand with
                 | None -> [| typeof<OpCode> |], [| box asm.OpCode |]

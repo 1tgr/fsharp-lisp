@@ -26,6 +26,10 @@ module CompilerTests =
                      "\"hello\"",                                       Some <| box "hello"
                      @"(define number 6)
                        number",                                         Some <| box 6
+                     @"(define number 6)
+                       (.ref ""xunit.dll"")
+                       (.using Xunit)
+                       (.asm (call Assert.Equal Int32 Int32) Void 6 number)", None
                      "(.asm ldc.i4.0 Int32)",                           Some <| box 0
                      "(.asm (ldc.i4 6) Int32)",                         Some <| box 6
                      "(.asm add Int32 2 4)",                            Some <| box 6

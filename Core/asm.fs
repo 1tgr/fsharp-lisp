@@ -35,14 +35,53 @@ module Asm =
                 | -1 -> failwith "expected type.method"
                 | index -> name.Substring(0, index), name.Substring(index + 1)
 
+            let getGenericArgs (assignments : Map<string, Type> option) (expectedType : Type) (actual : ParameterInfo) : Map<string, Type> option =
+                let actualType = actual.ParameterType
+
+                if actualType.IsGenericParameter then
+                    match assignments with
+                    | None -> None
+                    | Some map ->
+                        match Map.tryFind actualType.Name map with
+                        | None -> Some (Map.add actualType.Name expectedType map)
+                        | Some assignedType when expectedType = assignedType -> Some map
+                        | Some _ -> None
+
+                else if actualType = expectedType then
+                    assignments
+
+                else
+                    None
+
+            let filterMethod : (MethodInfo -> MethodInfo option) =
+                let argTypes = Array.ofList argTypes
+                fun mi ->
+                    if mi.Name = methodName then
+                        let parameters = mi.GetParameters()
+                        if argTypes.Length = parameters.Length then
+                            match Array.fold2 getGenericArgs (Some Map.empty) argTypes parameters with
+                            | None ->
+                                None
+
+                            | Some assignments when mi.IsGenericMethodDefinition ->
+                                mi.GetGenericArguments()
+                                |> Array.map (fun t -> assignments.[t.Name])
+                                |> fun a -> mi.MakeGenericMethod(a)
+                                |> Some
+
+                            | _ ->
+                                Some mi
+                        else
+                            None
+                    else
+                        None
+
             let t = getType typeName
-            match t.GetMethod(name = methodName,
-                                bindingAttr = (BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static),
-                                binder = null,
-                                types = Array.ofList argTypes,
-                                modifiers = null) with
-            | null -> failwithf "no method on %s matching %s %A" t.FullName methodName argTypes
-            | mi -> mi
+            let methods = Array.choose filterMethod <| t.GetMethods()
+            if methods.Length = 0 then
+                failwithf "no method on %s matching %s %A" t.FullName methodName argTypes
+            else
+                methods.[0]
 
         let parseOperand (opCode : OpCode) (operands : Expr list) : obj option =
             match opCode.OperandType with
