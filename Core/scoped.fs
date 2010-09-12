@@ -185,10 +185,10 @@ module Scoped =
 
             let env = { (!envs).[block.Env] with Parent = Some block.Env
                                                  Values = Map.empty }
-            envs := Map.add block.Env env !envs
+            envs := Map.add envId env !envs
 
             let env = fn envs envId
-            envs := Map.add block.Env env !envs
+            envs := Map.add envId env !envs
 
             let iblock = addToBlock envs
                                     { Env = envId; Body = List.empty }

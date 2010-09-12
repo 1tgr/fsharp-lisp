@@ -3,32 +3,23 @@ namespace Tim.Lisp.Compiler
 
 open System
 open System.CodeDom.Compiler
+open System.IO
 open Tim.Lisp.Core
 
 module Program =
-    [<EntryPoint>]
-    let main (_ : string array) =
-        try
-            let code = @"
-(.using System)
-(define (countTo total acc)
-  (if (= total acc)
-    acc
-    (countTo total (+ 1 acc))))
-(define (factorial n acc)
-  (if (= n 0)
-    acc
-    (factorial (- n 1) (* acc n))))
-(define number 6)
-(define (display-int n)
-        (.asm (call Console.WriteLine Int32) Void n))
-(display-int (factorial (countTo number 0) 1))"
+    let glob (wildcard : string) : string array =
+        Directory.GetFiles(
+            (match Path.GetDirectoryName(wildcard) with | "" -> "." | dir -> dir),
+            Path.GetFileName(wildcard))
 
+    [<EntryPoint>]
+    let main (filenames : string array) =
+        try
             let provider = new LispCodeProvider()
             let options = new CompilerParameters()
             options.OutputAssembly <- "output.exe"
 
-            let results = provider.CompileAssemblyFromSource(options, [| code |])
+            let results = provider.CompileAssemblyFromFile(options, Array.collect glob filenames)
             let errors = results.Errors |> Seq.cast<CompilerError>
             errors |> Seq.iter (fun e -> stderr.WriteLine(e.ErrorText))
 

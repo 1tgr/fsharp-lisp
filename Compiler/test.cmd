@@ -1,2 +1,2 @@
 @echo off
-lisp.compiler && ildasm output.exe /text /item=Program && peverify output.exe && output
+lisp.compiler demo.scm && ildasm output.exe /text /item=Program && peverify output.exe && output
