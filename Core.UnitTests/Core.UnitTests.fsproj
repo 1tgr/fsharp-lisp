@@ -60,10 +60,10 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="xunit">
-      <HintPath>D:\Data\Git\fsharp-lisp\lib\xunit.dll</HintPath>
+      <HintPath>..\lib\xunit.dll</HintPath>
     </Reference>
     <Reference Include="xunit.extensions">
-      <HintPath>D:\Data\Git\fsharp-lisp\lib\xunit.extensions.dll</HintPath>
+      <HintPath>..\lib\xunit.extensions.dll</HintPath>
     </Reference>
     <ProjectReference Include="..\Core\Core.fsproj">
       <Name>Core</Name>
