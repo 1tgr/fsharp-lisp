@@ -42,6 +42,7 @@ module Scoped =
                            | EqFunc
                            | Func of DeclId * Func<'a, 'ty>
                            | IfFunc
+                           | Macro of Stmt<Syntax.Expr> list
                            | NetFunc of MethodInfo
                            | RecursiveFunc of DeclId * RecursiveFunc<'ty>
                            | Var of DeclId * Var<'a>
@@ -63,6 +64,32 @@ module Scoped =
     let nextId : unit -> int =
         let id = ref 0
         fun () -> Interlocked.Increment(id)
+
+    let rec tryLookup (envs : Map<EnvId, Env<_, _>>) (name : string) (envId : EnvId) : EnvValue<_, _> option =
+        let env = envs.[envId]
+        match Map.tryFind name env.Values, env.Parent with
+        | Some value, _ -> Some value
+        | None, Some parent -> tryLookup envs name parent
+        | None, None -> None
+
+    let rec lookup (envs : Map<EnvId, Env<_, _>>) (name : string) (envId : EnvId) : EnvValue<_, _> =
+        match tryLookup envs name envId with
+        | Some value -> value
+        | None -> failwithf "undeclared identifier %s" name
+
+    let parseDefMacro
+        (values : Expr list)
+        (envs   : Map<EnvId, Env<_, _>> ref)
+        (envId  : EnvId)
+                : Env<_, string>
+        =
+        let name, value =
+            match values with
+            | Atom(_, name) :: body -> name, Macro (List.map Expr body)
+            | _ -> failwithf "defmacro expected name, not %A" values
+
+        let env = (!envs).[envId]
+        { env with Values = Map.add name value env.Values }
 
     let parseRef
         (values : Expr list)
@@ -190,12 +217,21 @@ module Scoped =
         =
         match exprs with
         | List(_, Atom(_, "define") :: values) :: tail -> enterEnv envs (parseDefine values) tail block
+        | List(_, Atom(_, "defmacro") :: values) :: tail -> enterEnv envs (parseDefMacro values) tail block
         | List(_, Atom(_, ".ref") :: values) :: tail -> enterEnv envs (parseRef values) tail block
         | List(_, Atom(_, ".using") :: values) :: tail -> enterEnv envs (parseUsing values) tail block
 
-        | head :: tail -> addToBlock envs
-                                     { block with Body = block.Body @ [Expr head] }
-                                     tail
+        | head :: tail ->
+            let body =
+                match head with
+                | List(_, Atom(_, name) :: values) ->
+                    match tryLookup !envs name block.Env with
+                    | Some (Macro body) -> body
+                    | _ -> [Expr head]
+
+                | _ -> [Expr head]
+
+            addToBlock envs { block with Body = block.Body @ body } tail
 
         | [] -> block
 

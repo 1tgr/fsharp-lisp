@@ -21,13 +21,6 @@ module Typed =
               | LookupVar of Position * Type * DeclId
               | String of Position * string
 
-    let rec lookup (envs : Map<EnvId, Env<_, _>>) (name : string) (envId : EnvId) : EnvValue<_, _> =
-        let env = envs.[envId]
-        match Map.tryFind name env.Values, env.Parent with
-        | Some value, _ -> value
-        | None, Some parent -> lookup envs name parent
-        | None, None -> failwithf "undeclared identifier %s" name
-
     let rec exprType (expr : Expr) : Type =
         match expr with
         | ApplyEqFunc _ -> typeof<bool>
@@ -131,6 +124,9 @@ module Typed =
                     | _ ->
                         failwith "expected 3 args for if, not %A" args
 
+                | Macro _ ->
+                    failwithf "didn't expect macro"
+
                 | NetFunc mi ->
                     ApplyNetFunc(a, mi, List.map (typedExpr envs envId) args)
 
@@ -152,6 +148,7 @@ module Typed =
         | EqFunc -> EqFunc
         | Func(id, func) -> Func(id, typedFunc envs func)
         | IfFunc -> IfFunc
+        | Macro body -> Macro body
         | NetFunc mi -> NetFunc mi
         | RecursiveFunc(id, func) -> RecursiveFunc(id, typedRecursiveFunc envs func)
         | Var(id, var) -> Var(id, typedVar envs var)
