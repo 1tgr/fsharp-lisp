@@ -60,19 +60,6 @@ module Scoped =
                                                Refs = List.empty
                                                Using = Set.empty }
 
-    let rec foldValue (envs : Map<EnvId, Env<_, _>>) (fn : 'a -> string -> EnvValue<_, _> -> 'a) (state : 'a) (name : string) (value : EnvValue<_, _>) : 'a =
-        match value with
-        | Func(id, func) -> foldEnv envs fn (fn state name value) func.Block.Env
-        | _ -> fn state name value
-
-    and foldEnv (envs : Map<EnvId, Env<_, _>>) (fn : 'a -> string -> EnvValue<_, _> -> 'a) (state : 'a) (envId : EnvId) : 'a =
-        Map.fold (foldValue envs fn) state (envs.[envId].Values)
-
-    and foldStmt (envs : Map<EnvId, Env<_, _>>) (fn : 'a -> string -> EnvValue<_, _> -> 'a) (state : 'a) (stmt : Stmt<_>) : 'a =
-        match stmt with
-        | Block block -> List.fold (foldStmt envs fn) (foldEnv envs fn state block.Env) block.Body
-        | _ -> state
-
     let nextId : unit -> int =
         let id = ref 0
         fun () -> Interlocked.Increment(id)
@@ -133,8 +120,7 @@ module Scoped =
                     | _ -> failwith "expected atom"
 
                 let paramNames = List.map nameOfAtom atoms
-                let funcId, func = makeFunc envs envId name paramNames body
-                name, Func(funcId, func)
+                name, makeFunc envs envId name paramNames body
 
             | _ ->
                 failwithf "define expected 1 value, not %A" values
@@ -148,7 +134,7 @@ module Scoped =
         (name  : string)
         (parms : (string * string) list)
         (body  : Expr list)
-               : DeclId * Func<_, string>
+               : EnvValue<_, string>
         =
         let funcId = nextId ()
         let funcEnvId = nextId ()
@@ -165,7 +151,7 @@ module Scoped =
 
         envs := Map.add funcEnvId funcEnv !envs
         let block = makeBlock envs funcEnvId body
-        funcId, { Block = block; Params = parms }
+        Func(funcId, { Block = block; Params = parms })
 
     and enterEnv
         (envs  : Map<EnvId, Env<_, _>> ref)

@@ -16,8 +16,7 @@ module CodeGen =
             IsTail : bool
         }
 
-    and ILFunction<'a>(id : DeclId,
-                       func : Func<Expr, Type>,
+    and ILFunction<'a>(func : Func<Expr, Type>,
                        envs : Map<EnvId, Env<Expr, Type>>,
                        typeBuilder : TypeBuilder, 
                        name : string)
@@ -46,12 +45,9 @@ module CodeGen =
 
             | _ -> map
 
-        let locals = foldEnv envs makeLocal Map.empty func.Block.Env
+        let locals = Map.fold makeLocal Map.empty envs.[func.Block.Env].Values
 
-        member this.Id = id
         member this.Func = func
-        member this.TypeBuilder = typeBuilder
-        member this.Name = name
         member this.DynamicMethod = dynamicMethod
         member this.Generator = g
 
@@ -137,15 +133,16 @@ module CodeGen =
         (typeBuilder : TypeBuilder)
         (map         : Map<DeclId, ILFunction<_>>)
         (name        : string)
-        (value       : EnvValue<_, _>)
+        (func        : EnvValue<_, _>)
                      : Map<DeclId, ILFunction<_>>
         =
-        match value with
+        match func with
         | Func(id, func) ->
-            let ilFunction = new ILFunction<_>(id, func, envs, typeBuilder, name)
+            let ilFunction = new ILFunction<_>(func, envs, typeBuilder, name)
             Map.add id ilFunction map
 
-        | _ -> map
+        | _ ->
+            map
 
     let rec makeAdjacency (nodes : NodeId list) (adj : Map<NodeId, NodeId>) =
         match nodes with

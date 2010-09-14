@@ -27,13 +27,10 @@ module Compiler =
 
     let compileToAst (code : Syntax.Expr list) : Map<EnvId, Env<Expr, _>> * EnvValue<Expr, _> =
         let envs = ref (Map.add mainEnvId mainEnv Map.empty)
-
-        let ast =
-            prelude @ code
-            |> makeFunc envs mainEnvId "main" List.empty
-            |> Func
-    
-        Map.map (fun _ -> typedEnv !envs) !envs, (typedValue !envs ast)
+        let ast = makeFunc envs mainEnvId "main" List.empty (prelude @ code)
+        let typedEnvs = Map.map (fun _ -> typedEnv !envs) !envs
+        let typedAst = typedValue !envs ast
+        typedEnvs, typedAst
 
     let compileAstToMemory (filename : string) (envs : Map<EnvId, Env<_, _>>, main : EnvValue<Expr, _>) : (AssemblyBuilder * Type * MethodInfo) =
         let name = AssemblyName(Path.GetFileNameWithoutExtension(filename))
@@ -45,7 +42,9 @@ module Compiler =
 
         let moduleBuilder = assemblyBuilder.DefineDynamicModule(Path.GetFileName(filename))
         let typeBuilder = moduleBuilder.DefineType("Program", TypeAttributes.Sealed ||| TypeAttributes.Public)
-        let ilFuncs = foldValue envs (makeILFunction envs typeBuilder) Map.empty "main" main
+
+        let ilFuncs = makeILFunction envs typeBuilder Map.empty "main" main
+        let ilFuncs = Map.fold (fun map _ env -> Map.fold (makeILFunction envs typeBuilder) map env.Values) ilFuncs envs
 
         for _, ilFunc in Map.toSeq ilFuncs do
             emitFunc ilFuncs ilFunc
