@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Reflection
 open System.Threading
+open FParsec
 
 module Scoped =
     open Syntax
@@ -11,24 +12,20 @@ module Scoped =
     type DeclId = int
     type EnvId = int
 
+    type Stmt<'a> = Chain of Stmt<'a> * Stmt<'a>
+                  | EnterEnv of EnvId * (Stmt<'a> option)
+                  | Expr of 'a
+
     type RecursiveFunc<'ty> =
         {
             Env : EnvId
             Params : (string * 'ty) list
         }
 
-    type Block<'a> =
-        {
-            Env : EnvId
-            Body : Stmt<'a> list
-        }
-
-    and Stmt<'a> = Block of Block<'a>
-                 | Expr of 'a
-
     type Func<'a, 'ty> =
         {
-            Block : Block<'a>
+            DeclEnv : EnvId
+            Body : Stmt<'a>
             Params : (string * 'ty) list
         }
 
@@ -42,7 +39,7 @@ module Scoped =
                            | EqFunc
                            | Func of DeclId * Func<'a, 'ty>
                            | IfFunc
-                           | Macro of Stmt<Syntax.Expr> list
+                           | Macro of Syntax.Expr list
                            | NetFunc of MethodInfo
                            | RecursiveFunc of DeclId * RecursiveFunc<'ty>
                            | Var of DeclId * Var<'a>
@@ -77,6 +74,12 @@ module Scoped =
         | Some value -> value
         | None -> failwithf "undeclared identifier %s" name
 
+    let collapse (body : Stmt<_> list) : Stmt<_> option =
+        match body with
+        | [] -> None
+        | [stmt] -> Some stmt
+        | body -> Some (List.reduce (fun a b -> Chain(a, b)) body)
+
     let parseDefMacro
         (values : Expr list)
         (envs   : Map<EnvId, Env<_, _>> ref)
@@ -85,7 +88,7 @@ module Scoped =
         =
         let name, value =
             match values with
-            | Atom(_, name) :: body -> name, Macro (List.map Expr body)
+            | Atom(_, name) :: body -> name, Macro body
             | _ -> failwithf "defmacro expected name, not %A" values
 
         let env = (!envs).[envId]
@@ -177,73 +180,73 @@ module Scoped =
                                              Values = Map.ofList envValues }
 
         envs := Map.add funcEnvId funcEnv !envs
-        let block = makeBlock envs funcEnvId body
-        Func(funcId, { Block = block; Params = parms })
+
+        let innerBody = makeBlock envs funcEnvId body
+        Func(funcId, { DeclEnv = envId
+                       Body = EnterEnv(funcEnvId, collapse innerBody)
+                       Params = parms })
 
     and enterEnv
-        (envs  : Map<EnvId, Env<_, _>> ref)
-        (fn    : Map<EnvId, Env<_, _>> ref -> EnvId -> Env<_, _>)
-        (body  : Expr list)
-        (block : Block<_>)
-               : Block<_>
+        (envs       : Map<EnvId, Env<_, _>> ref)
+        (fn         : Map<EnvId, Env<_, _>> ref -> EnvId -> Env<_, _>)
+        (body       : Expr list)
+        (outerEnvId : EnvId)
+        (outerBody  : Stmt<_> list)
+                    : Stmt<_> list
         =
-        match block with
-        | { Body = [] } ->
-            let env = fn envs block.Env
-            envs := Map.add block.Env env !envs
-            addToBlock envs block body
+        let innerEnvId = nextId ()
 
-        | _ ->
-            let envId = nextId ()
+        let env = { (!envs).[outerEnvId] with Parent = Some outerEnvId
+                                                       Values = Map.empty }
+        envs := Map.add innerEnvId env !envs
 
-            let env = { (!envs).[block.Env] with Parent = Some block.Env
-                                                 Values = Map.empty }
-            envs := Map.add envId env !envs
+        let env = fn envs innerEnvId
+        envs := Map.add innerEnvId env !envs
 
-            let env = fn envs envId
-            envs := Map.add envId env !envs
-
-            let iblock = addToBlock envs
-                                    { Env = envId; Body = List.empty }
-                                    body
-
-            { block with Body = block.Body @ [Block iblock] }
+        let innerBody = addToBlock envs innerEnvId [] body
+        outerBody @ [EnterEnv(innerEnvId, collapse innerBody)]
 
     and addToBlock
-        (envs   : Map<EnvId, Env<_, _>> ref)
-        (block  : Block<_>) 
-        (exprs  : Expr list) 
-                : Block<_>
+        (envs       : Map<EnvId, Env<_, _>> ref)
+        (outerEnvId : EnvId)
+        (outerBody  : Stmt<_> list)
+        (exprs      : Expr list) 
+                    : Stmt<_> list
         =
         match exprs with
-        | List(_, Atom(_, "define") :: values) :: tail -> enterEnv envs (parseDefine values) tail block
-        | List(_, Atom(_, "defmacro") :: values) :: tail -> enterEnv envs (parseDefMacro values) tail block
-        | List(_, Atom(_, ".ref") :: values) :: tail -> enterEnv envs (parseRef values) tail block
-        | List(_, Atom(_, ".using") :: values) :: tail -> enterEnv envs (parseUsing values) tail block
+        | List(_, Atom(_, "define") :: values) :: tail ->
+            enterEnv envs (parseDefine values) tail outerEnvId outerBody
+
+        | List(_, Atom(_, "defmacro") :: values) :: tail ->
+            enterEnv envs (parseDefMacro values) tail outerEnvId outerBody
+
+        | List(_, Atom(_, ".ref") :: values) :: tail ->
+            enterEnv envs (parseRef values) tail outerEnvId outerBody
+
+        | List(_, Atom(_, ".using") :: values) :: tail ->
+            enterEnv envs (parseUsing values) tail outerEnvId outerBody
 
         | head :: tail ->
             let body =
                 match head with
                 | List(_, Atom(_, name) :: values) ->
-                    match tryLookup !envs name block.Env with
-                    | Some (Macro body) -> body
+                    match tryLookup !envs name outerEnvId with
+                    | Some (Macro body) -> List.map Expr body
                     | _ -> [Expr head]
 
                 | _ -> [Expr head]
 
-            addToBlock envs { block with Body = block.Body @ body } tail
+            addToBlock envs outerEnvId (outerBody @ body) tail
 
-        | [] -> block
+        | [] -> outerBody
 
     and makeBlock
         (envs      : Map<EnvId, Env<_, _>> ref)
         (parentEnv : EnvId)
         (exprs     : Expr list)
-                   : Block<Expr>
+                   : Stmt<_> list
         =
-        addToBlock envs
-                   { Env = parentEnv; Body = List.empty }
-                   exprs
+        addToBlock envs parentEnv [] exprs
 
     let getType (env : Env<_, _>) (name : string) : Type =
         let inAssembly (ref : Assembly) : Type option = 

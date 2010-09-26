@@ -36,11 +36,12 @@ module Typed =
         | LookupVar(_, t, _) -> t
         | String(_, s) -> typeof<string>
 
-    let rec blockType (block : Block<Expr>) : Type =
-        match List.rev block.Body with
-        | [] -> typeof<Void>
-        | Block block :: _ -> blockType block
-        | Expr expr :: _ -> exprType expr
+    let rec stmtType (stmt : Stmt<Expr>) : Type =
+        match stmt with
+        | Chain(_, b) -> stmtType b
+        | EnterEnv(_, Some stmt) -> stmtType stmt
+        | EnterEnv(_, None) -> typeof<Void>
+        | Expr expr -> exprType expr
 
     let typedRecursiveFunc (envs : Map<EnvId, Env<Syntax.Expr, string>>) (func : RecursiveFunc<string>) : RecursiveFunc<Type> =
         let env = envs.[func.Env]
@@ -54,8 +55,9 @@ module Typed =
           Stack = List.map (typedExpr envs envId) asm.Stack }
     
     and typedFunc (envs : Map<EnvId, Env<Syntax.Expr, string>>) (func : Func<Syntax.Expr, string>) : Func<Expr, Type> =
-        let env = envs.[func.Block.Env]
-        { Block = typedBlock envs func.Block
+        let env = envs.[func.DeclEnv]
+        { DeclEnv = func.DeclEnv
+          Body = typedStmt envs func.DeclEnv func.Body
           Params = List.map (fun (name, ty) -> (name, getType env ty)) func.Params }
 
     and typedVar (envs : Map<EnvId, Env<Syntax.Expr, string>>) (var : Var<Syntax.Expr>) : Var<Expr> =
@@ -64,12 +66,9 @@ module Typed =
 
     and typedStmt (envs : Map<EnvId, Env<Syntax.Expr, string>>) (envId : EnvId) (stmt : Stmt<Syntax.Expr>) : Stmt<Expr> =
         match stmt with
-        | Block block -> Block (typedBlock envs block)
+        | Chain(a, b)-> Chain(typedStmt envs envId a, typedStmt envs envId b)
+        | EnterEnv(envId, stmt) -> EnterEnv(envId, Option.map (typedStmt envs envId) stmt)
         | Expr expr -> Expr (typedExpr envs envId expr)
-
-    and typedBlock (envs : Map<EnvId, Env<Syntax.Expr, string>>) (block : Block<Syntax.Expr>) : Block<Expr> =
-        { Env = block.Env
-          Body = List.map (typedStmt envs block.Env) block.Body }
 
     and typedExpr (envs : Map<EnvId, Env<Syntax.Expr, string>>) (envId : EnvId) (expr : Syntax.Expr) : Expr =
         match expr with
@@ -114,7 +113,7 @@ module Typed =
                         failwith "expected 2 args for =, not %A" args
 
                 | Func(id, func) ->
-                    ApplyFunc(a, blockType (typedBlock envs func.Block), id, List.map (typedExpr envs envId) args)
+                    ApplyFunc(a, stmtType (typedStmt envs func.DeclEnv func.Body), id, List.map (typedExpr envs envId) args)
 
                 | IfFunc ->
                     match args with

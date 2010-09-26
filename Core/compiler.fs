@@ -47,7 +47,7 @@ module Compiler =
         let ilFuncs = Map.fold (fun map _ env -> Map.fold (makeILFunction envs typeBuilder) map env.Values) ilFuncs envs
 
         for _, ilFunc in Map.toSeq ilFuncs do
-            emitFunc ilFuncs ilFunc
+            emitFunc envs ilFuncs ilFunc
 
         let t = typeBuilder.CreateType()
         let methodInfo = t.GetMethod("main", BindingFlags.Public ||| BindingFlags.Static)
