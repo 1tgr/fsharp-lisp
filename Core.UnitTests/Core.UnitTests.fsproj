@@ -54,6 +54,7 @@
     <EmbeddedResource Include="recurse-tail-big.scm" />
     <EmbeddedResource Include="string.scm" />
     <EmbeddedResource Include="var.scm" />
+    <EmbeddedResource Include="stdlib-xunit.scm" />
     <Compile Include="CompilerTests.fs" />
   </ItemGroup>
   <ItemGroup>

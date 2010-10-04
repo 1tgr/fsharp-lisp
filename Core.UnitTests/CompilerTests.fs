@@ -16,21 +16,14 @@ module Utils =
     let assembly = typeof<Dummy>.Assembly
     let sampleNames = 
         assembly.GetManifestResourceNames()
-        |> Array.filter (fun s -> s.EndsWith(".scm"))
-
-    let builtins =
-        @"
-(.ref ""xunit.dll"")
-(.using System)
-(.using Xunit)
-(define (assert-equal expected actual)
-        (.asm (call Assert.Equal Int32 Int32) Void expected actual))"
-        |> Parser.parseString
+        |> Array.filter (fun s -> s.EndsWith(".scm") && (not (s.StartsWith("stdlib-"))))
 
     let load (name : string) : string =
         use stream = assembly.GetManifestResourceStream(name)
         use reader = new StreamReader(stream)
         reader.ReadToEnd()
+
+    let builtins = Parser.parseString (load "stdlib-xunit.scm")
 
     let parse (name : string) : Syntax.Expr list =
         let source = load name
