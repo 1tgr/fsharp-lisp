@@ -46,6 +46,9 @@
     <EmbeddedResource Include="asm-no-operand-stack.scm" />
     <EmbeddedResource Include="asm-operand-no-stack.scm" />
     <EmbeddedResource Include="asm-operand-stack.scm" />
+    <EmbeddedResource Include="blank-function.scm" />
+    <EmbeddedResource Include="blank-macro.scm" />
+    <EmbeddedResource Include="blank-program.scm" />
     <EmbeddedResource Include="macro-args.scm" />
     <EmbeddedResource Include="macro-no-args.scm" />
     <EmbeddedResource Include="number.scm" />
