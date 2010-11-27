@@ -21,12 +21,6 @@ module Typed =
               | LookupVar of Position * Type * DeclId
               | String of Position * string
 
-    let rec lookup (name : string) (env : Env<_>) : EnvValue<_> =
-        match Map.tryFind name env.Values, env.Parent with
-        | Some value, _ -> value
-        | None, Some parent -> lookup name parent
-        | None, None -> failwithf "undeclared identifier %s" name
-
     let rec exprType (expr : Expr) : Type =
         match expr with
         | ApplyEqFunc _ -> typeof<bool>
@@ -42,53 +36,41 @@ module Typed =
         | LookupVar(_, t, _) -> t
         | String(_, s) -> typeof<string>
 
-    let rec blockType (block : Block<Expr>) : Type =
-        match List.rev block.Body with
-        | [] -> typeof<Void>
-        | Block block :: _ -> blockType block
-        | Expr expr :: _ -> exprType expr
+    let rec stmtType (stmt : Stmt<Expr>) : Type =
+        match stmt with
+        | Chain(_, b) -> stmtType b
+        | EnterEnv(_, Some stmt) -> stmtType stmt
+        | EnterEnv(_, None) -> typeof<Void>
+        | Expr expr -> exprType expr
 
-    let rec typedAsm (env : Env<Syntax.Expr>) (asm : Asm<Syntax.Expr>) : Asm<Expr> =
+    let typedRecursiveFunc (envs : Map<EnvId, Env<Syntax.Expr, string>>) (func : RecursiveFunc<string>) : RecursiveFunc<Type> =
+        let env = envs.[func.Env]
+        { Env = func.Env
+          Params = List.map (fun (name, ty) -> (name, getType env ty)) func.Params }
+
+    let rec typedAsm (envs : Map<EnvId, Env<Syntax.Expr, string>>) (envId : EnvId) (asm : Asm<Syntax.Expr>) : Asm<Expr> =
         { OpCode = asm.OpCode
           Operand = asm.Operand
           ResultType = asm.ResultType
-          Stack = List.map (typedExpr env) asm.Stack }
+          Stack = List.map (typedExpr envs envId) asm.Stack }
     
-    and typedFunc (func : Func<Syntax.Expr>) : Func<Expr> =
-        { Block = ref (typedBlock !func.Block)
-          Params = func.Params }  
+    and typedFunc (envs : Map<EnvId, Env<Syntax.Expr, string>>) (func : Func<Syntax.Expr, string>) : Func<Expr, Type> =
+        let env = envs.[func.DeclEnv]
+        { DeclEnv = func.DeclEnv
+          Body = typedStmt envs func.DeclEnv func.Body
+          Params = List.map (fun (name, ty) -> (name, getType env ty)) func.Params }
 
-    and typedVar (var : Var<Syntax.Expr>) : Var<Expr> =
-        { DeclEnv = typedEnv var.DeclEnv
-          InitExpr = typedExpr var.DeclEnv var.InitExpr }
+    and typedVar (envs : Map<EnvId, Env<Syntax.Expr, string>>) (var : Var<Syntax.Expr>) : Var<Expr> =
+        { DeclEnv = var.DeclEnv
+          InitExpr = typedExpr envs var.DeclEnv var.InitExpr }
 
-    and typedValue (value : EnvValue<Syntax.Expr>) : EnvValue<Expr> =
-        match value with
-        | Arg n -> Arg n
-        | EqFunc -> EqFunc
-        | Func(id, func) -> Func(id, typedFunc func)
-        | IfFunc -> IfFunc
-        | NetFunc mi -> NetFunc mi
-        | RecursiveFunc(id, paramNames) -> RecursiveFunc(id, paramNames)
-        | Var(id, var) -> Var(id, typedVar var)
-
-    and typedEnv (env : Env<Syntax.Expr>) : Env<Expr> =
-        { Parent = Option.map typedEnv env.Parent
-          Func = env.Func
-          Values = Map.map (fun _ -> typedValue) env.Values
-          Refs = env.Refs
-          Using = env.Using }
-
-    and typedStmt (env : Env<Syntax.Expr>) (stmt : Stmt<Syntax.Expr>) : Stmt<Expr> =
+    and typedStmt (envs : Map<EnvId, Env<Syntax.Expr, string>>) (envId : EnvId) (stmt : Stmt<Syntax.Expr>) : Stmt<Expr> =
         match stmt with
-        | Block block -> Block (typedBlock block)
-        | Expr expr -> Expr (typedExpr env expr)
+        | Chain(a, b)-> Chain(typedStmt envs envId a, typedStmt envs envId b)
+        | EnterEnv(envId, stmt) -> EnterEnv(envId, Option.map (typedStmt envs envId) stmt)
+        | Expr expr -> Expr (typedExpr envs envId expr)
 
-    and typedBlock (block : Block<Syntax.Expr>) : Block<Expr> =
-        { Env = typedEnv block.Env
-          Body = List.map (typedStmt block.Env) block.Body }
-
-    and typedExpr (env : Env<Syntax.Expr>) (expr : Syntax.Expr) : Expr =
+    and typedExpr (envs : Map<EnvId, Env<Syntax.Expr, string>>) (envId : EnvId) (expr : Syntax.Expr) : Expr =
         match expr with
         | Syntax.Atom(a, "#t") ->
             Bool(a, true)
@@ -106,46 +88,50 @@ module Typed =
             Char(a, name.[2])
 
         | Syntax.Atom(a, name) ->
-            match lookup name env with
+            match lookup envs name envId with
             | Arg n -> LookupArg(a, typeof<int>, n)
-            | Var(id, var) -> LookupVar(a, exprType ((typedVar var).InitExpr), id)
+            | Var(id, var) -> LookupVar(a, exprType ((typedVar envs var).InitExpr), id)
             | _ ->  failwith "delegates not yet implemented"
 
         | Syntax.Float(a, n) -> Float(a, n)
         | Syntax.Int(a, n) -> Int(a, n)
 
         | Syntax.List(a, values) ->
-            match tryParseAsm env.Refs env.Using expr, values with
+            let env = envs.[envId]
+            match tryParseAsm env expr, values with
             | Some asm, _ ->
-                Asm(a, typedAsm env asm)
+                Asm(a, typedAsm envs envId asm)
 
             | None, Syntax.Atom(_, name) :: args ->
-                match lookup name env with
+                match lookup envs name envId with
                 | EqFunc ->
                     match args with
                     | [x; y] ->
-                        ApplyEqFunc(a, typedExpr env x, typedExpr env y)
+                        ApplyEqFunc(a, typedExpr envs envId x, typedExpr envs envId y)
 
                     | _ ->
                         failwith "expected 2 args for =, not %A" args
 
                 | Func(id, func) ->
-                    ApplyFunc(a, blockType (typedBlock !func.Block), id, List.map (typedExpr env) args)
+                    ApplyFunc(a, stmtType (typedStmt envs func.DeclEnv func.Body), id, List.map (typedExpr envs envId) args)
 
                 | IfFunc ->
                     match args with
                     | [test; ifTrue; ifFalse] ->
-                        ApplyIfFunc(a, typedExpr env test, typedExpr env ifTrue, typedExpr env ifFalse)
+                        ApplyIfFunc(a, typedExpr envs envId test, typedExpr envs envId ifTrue, typedExpr envs envId ifFalse)
 
                     | _ ->
                         failwith "expected 3 args for if, not %A" args
 
+                | Macro _ ->
+                    failwithf "didn't expect macro"
+
                 | NetFunc mi ->
-                    ApplyNetFunc(a, mi, List.map (typedExpr env) args)
+                    ApplyNetFunc(a, mi, List.map (typedExpr envs envId) args)
 
                 | RecursiveFunc(id, _) ->
                     // TODO type inference for recursive functions
-                    ApplyFunc(a, typeof<int>, id, List.map (typedExpr env) args)
+                    ApplyFunc(a, typeof<int>, id, List.map (typedExpr envs envId) args)
 
                 | Arg _ | Var _ ->
                     failwith "delegates not yet implemented"
@@ -154,3 +140,21 @@ module Typed =
                 failwith "quotation not yet implemented"
 
         | Syntax.String(a, s) -> String(a, s)
+
+    let typedValue (envs : Map<EnvId, Env<Syntax.Expr, string>>) (value : EnvValue<Syntax.Expr, string>) : EnvValue<Expr, Type> =
+        match value with
+        | Arg n -> Arg n
+        | EqFunc -> EqFunc
+        | Func(id, func) -> Func(id, typedFunc envs func)
+        | IfFunc -> IfFunc
+        | Macro(paramNames, body) -> Macro(paramNames, body)
+        | NetFunc mi -> NetFunc mi
+        | RecursiveFunc(id, func) -> RecursiveFunc(id, typedRecursiveFunc envs func)
+        | Var(id, var) -> Var(id, typedVar envs var)
+
+    let typedEnv (envs : Map<EnvId, Env<Syntax.Expr, string>>) (env : Env<Syntax.Expr, string>) : Env<Expr, Type> =
+        { Parent = env.Parent
+          Func = env.Func
+          Values = Map.map (fun _ -> typedValue envs) env.Values
+          Refs = env.Refs
+          Using = env.Using }

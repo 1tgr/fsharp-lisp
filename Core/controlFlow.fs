@@ -1,6 +1,7 @@
 #light
 namespace Tim.Lisp.Core
 
+open System
 open System.Threading
 
 module ControlFlow =
@@ -9,7 +10,10 @@ module ControlFlow =
 
     type NodeId = int
 
-    type Node<'a> = Stmt<'a> list
+    type Instr<'a> = InitLocal of DeclId * 'a
+                   | Eval of 'a
+
+    type Node<'a> = Instr<'a> list
 
     type Edge<'a> = Always of NodeId
                   | IfEqual of 'a * 'a * NodeId * NodeId
@@ -24,11 +28,11 @@ module ControlFlow =
     module Node =
         let empty = List.empty
 
-        let singleton (stmt : Stmt<_>) : Node<_> =
-            [stmt]
+        let singleton (instr : Instr<_>) : Node<_> =
+            [instr]
 
-        let add (stmt : Stmt<_>) (node : Node<_>) : Node<_> =
-            node @ [stmt]
+        let add (instr : Instr<_>) (node : Node<_>) : Node<_> =
+            node @ [instr]
 
     module Graph =
         let makeNodeId =
@@ -44,38 +48,62 @@ module ControlFlow =
         let addEdge (fromId : NodeId) (edge : Edge<'a>) (graph : Graph<_>) : Graph<_> =
             { graph with OutEdges = Map.add fromId edge graph.OutEdges }
 
-    let makeGraph (block : Block<Expr>) : NodeId * NodeId list * Graph<Expr> =
+        let appendToNode (node : Instr<_>) (exitNodes : NodeId list) (graph : Graph<_>) : NodeId list * Graph<_> =
+            match exitNodes with
+            | [id] ->
+                let graph = addNode id (Node.add node graph.Nodes.[id]) graph
+                [id], graph
+
+            | ids ->
+                let id = makeNodeId ()
+                let graph = addNode id (Node.singleton node) graph
+                let graph = List.fold (fun g fromId -> addEdge fromId (Always id) g) graph ids
+                [id], graph
+
+    let makeGraph (envs : Map<EnvId, Env<Expr, Type>>) (body : Stmt<Expr>) : NodeId * NodeId list * Graph<Expr> =
         let rec addToGraph
-            (body      : Stmt<_> list)
+            (body      : Stmt<_>)
             (exitNodes : NodeId list)
             (graph     : Graph<_>)
                        : NodeId list * Graph<_>
             =
             match body with
-            | [] ->
-                exitNodes, graph
+            | Chain(head, tail) ->
+                let exitNodes, graph = addToGraph head exitNodes graph
+                addToGraph tail exitNodes graph
 
-            | head :: tail ->
-                match head with
-                | Expr(ApplyIfFunc(_, test, ifTrue, ifFalse)) ->
-                    let t = Graph.makeNodeId ()
-                    let f = Graph.makeNodeId ()
+            | EnterEnv(envId, tail) ->
+                let env = envs.[envId]
 
-                    let graph =
-                        graph
-                        |> Graph.addNode t (Node.singleton (Expr ifTrue))
-                        |> Graph.addNode f (Node.singleton (Expr ifFalse))
+                let exitNodes, graph =
+                    env.Values
+                    |> Map.fold (fun (exitNodes, graph) _ value ->
+                        match value with
+                        | Var(varId, var) -> Graph.appendToNode (InitLocal(varId, var.InitExpr)) exitNodes graph
+                        | _ -> exitNodes, graph) (exitNodes, graph)
 
-                    let edge =
-                        match test with
-                        | ApplyEqFunc(_, a, b) -> IfEqual(a, b, t, f)
-                        | _ -> IfTrue(test, t, f)
-                        
+                match tail with
+                | Some tail -> addToGraph tail exitNodes graph
+                | None -> exitNodes, graph
+                
+            | Expr(ApplyIfFunc(_, test, ifTrue, ifFalse)) ->
+                let t = Graph.makeNodeId ()
+                let f = Graph.makeNodeId ()
+
+                let graph =
+                    graph
+                    |> Graph.addNode t (Node.singleton (Eval ifTrue))
+                    |> Graph.addNode f (Node.singleton (Eval ifFalse))
+
+                let edge =
+                    match test with
+                    | ApplyEqFunc(_, a, b) -> IfEqual(a, b, t, f)
+                    | _ -> IfTrue(test, t, f)
+
+                let graph =                        
                     match exitNodes with
                     | [id] ->
-                        graph
-                        |> Graph.addEdge id edge
-                        |> addToGraph tail [t; f]
+                        Graph.addEdge id edge graph
 
                     | ids ->
                         let id = Graph.makeNodeId ()
@@ -84,28 +112,17 @@ module ControlFlow =
                         ids
                         |> List.fold (fun g fromId -> Graph.addEdge fromId (Always id) g) graph
                         |> Graph.addEdge id edge
-                        |> addToGraph tail [t; f]
 
-                | stmt ->
-                    match exitNodes with
-                    | [id] ->
-                        graph
-                        |> Graph.addNode id (Node.add stmt graph.Nodes.[id])
-                        |> addToGraph tail [id]
+                [t; f], graph
 
-                    | ids ->
-                        let id = Graph.makeNodeId ()
-                        let graph = Graph.addNode id (Node.singleton stmt) graph
-
-                        ids
-                        |> List.fold (fun g fromId -> Graph.addEdge fromId (Always id) g) graph
-                        |> addToGraph tail [id]
+            | Expr e ->
+                Graph.appendToNode (Eval e) exitNodes graph
 
         let entryNode = Graph.makeNodeId ()
 
         let exitNodes, graph =
             Graph.empty
             |> Graph.addNode entryNode Node.empty
-            |> addToGraph block.Body [entryNode]
+            |> addToGraph body [entryNode]
 
         entryNode, exitNodes, graph

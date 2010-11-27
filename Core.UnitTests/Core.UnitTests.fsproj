@@ -25,7 +25,7 @@
     <DocumentationFile>
     </DocumentationFile>
     <StartAction>Program</StartAction>
-    <StartProgram>lib\NUnit-2.5.5.10112\bin\net-2.0\nunit.exe</StartProgram>
+    <StartProgram>lib\xunit-1.6.1\xunit.gui.exe</StartProgram>
     <StartArguments>Tim.Lisp.Core.UnitTests.dll</StartArguments>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
@@ -38,21 +38,39 @@
     <DocumentationFile>
     </DocumentationFile>
   </PropertyGroup>
+  <Import Condition="!$(IsMono)" Project="$(ProgramFiles)\Microsoft F#\v4.0\Microsoft.FSharp.Targets" />
+  <Import Condition=" $(IsMono)" Project="..\lib\Tim.FSharp.targets" />
   <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="FSharp.Core" />
-    <Reference Include="nunit.framework">
-      <HintPath>..\lib\nunit.framework.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Eval.fs" />
-    <Compile Include="Assertion.fs" />
+    <EmbeddedResource Include="asm-nested.scm" />
+    <EmbeddedResource Include="asm-no-operand-no-stack.scm" />
+    <EmbeddedResource Include="asm-no-operand-stack.scm" />
+    <EmbeddedResource Include="asm-operand-no-stack.scm" />
+    <EmbeddedResource Include="asm-operand-stack.scm" />
+    <EmbeddedResource Include="blank-function.scm" />
+    <EmbeddedResource Include="blank-macro.scm" />
+    <EmbeddedResource Include="blank-program.scm" />
+    <EmbeddedResource Include="macro-args.scm" />
+    <EmbeddedResource Include="macro-no-args.scm" />
+    <EmbeddedResource Include="number.scm" />
+    <EmbeddedResource Include="recurse-no-tail.scm" />
+    <EmbeddedResource Include="recurse-tail.scm" />
+    <EmbeddedResource Include="recurse-tail-big.scm" />
+    <EmbeddedResource Include="string.scm" />
+    <EmbeddedResource Include="var.scm" />
+    <EmbeddedResource Include="stdlib-xunit.scm" />
     <Compile Include="CompilerTests.fs" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="FSharp.Core" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="xunit">
+      <HintPath>..\lib\xunit.dll</HintPath>
+    </Reference>
+    <Reference Include="xunit.extensions">
+      <HintPath>..\lib\xunit.extensions.dll</HintPath>
+    </Reference>
     <ProjectReference Include="..\Core\Core.fsproj">
       <Name>Core</Name>
       <Project>{be723fea-19b2-47d8-9760-ecb75c3a7c3f}</Project>
@@ -64,8 +82,6 @@
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>
-  <Import Condition="!$(IsMono)" Project="$(ProgramFiles)\Microsoft F#\v4.0\Microsoft.FSharp.Targets" />
-  <Import Condition=" $(IsMono)" Project="..\lib\Tim.FSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 	     Other similar extension points exist, see Microsoft.Common.targets.
 	<Target Name="BeforeBuild">

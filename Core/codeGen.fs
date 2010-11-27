@@ -16,27 +16,28 @@ module CodeGen =
             IsTail : bool
         }
 
-    and ILFunction<'a>(id : DeclId,
-                        func : Func<Expr>,
-                        typeBuilder : TypeBuilder, 
-                        name : string)
+    and ILFunction<'a>(funcId : DeclId,
+                       func : Func<Expr, Type>,
+                       envs : Map<EnvId, Env<Expr, Type>>,
+                       typeBuilder : TypeBuilder, 
+                       name : string)
         =
         let dynamicMethod = 
             typeBuilder.DefineMethod(
                 name, 
                 MethodAttributes.Public ||| MethodAttributes.Static, 
-                blockType !func.Block, 
-                func.Params |> List.map (fun _ -> typeof<int>) |> Array.ofList)
+                stmtType func.Body, 
+                func.Params |> List.map snd |> Array.ofList)
 
         do
             let mutable index = 1
-            for name in func.Params do
+            for name, _ in func.Params do
                 ignore <| dynamicMethod.DefineParameter(index, ParameterAttributes.None, name)
                 index <- index + 1
 
         let g = dynamicMethod.GetILGenerator()
 
-        let makeLocal (map : Map<DeclId, LocalBuilder>) (name : string) (value : EnvValue<_>) : Map<DeclId, LocalBuilder> =
+        let makeLocal (map : Map<DeclId, LocalBuilder>) (name : string, value : EnvValue<_, _>) : Map<DeclId, LocalBuilder> =
             match value with
             | Var(id, var) ->
                 let t = exprType var.InitExpr
@@ -45,12 +46,17 @@ module CodeGen =
 
             | _ -> map
 
-        let locals = foldEnv makeLocal Map.empty (!func.Block).Env
+        let locals =
+            envs
+            |> Map.toSeq
+            |> Seq.collect (fun (_, env) ->
+                if env.Func = funcId then
+                    Map.toSeq env.Values
+                else
+                    Seq.empty)
+            |> Seq.fold makeLocal Map.empty
 
-        member this.Id = id
         member this.Func = func
-        member this.TypeBuilder = typeBuilder
-        member this.Name = name
         member this.DynamicMethod = dynamicMethod
         member this.Generator = g
 
@@ -68,6 +74,13 @@ module CodeGen =
             let noTailCall = { context with IsTail = false }
             for stack in asm.Stack do
                 this.EmitExpr noTailCall stack
+
+            let isCall = asm.OpCode = OpCodes.Call || 
+                         asm.OpCode = OpCodes.Calli || 
+                         asm.OpCode = OpCodes.Callvirt
+
+            if context.IsTail && isCall then
+                g.Emit(OpCodes.Tailcall)
 
             let types, args =
                 match asm.Operand with
@@ -92,45 +105,38 @@ module CodeGen =
             | Asm(_, asm) -> this.EmitAsm context asm
             | Bool(_, true) -> g.Emit(OpCodes.Ldc_I4_1)
             | Bool(_, false) -> g.Emit(OpCodes.Ldc_I4_0)
-            | Char(_, c) -> g.Emit(OpCodes.Ldc_I4, int16 c)
+            | Char(_, c) -> g.Emit(OpCodes.Ldc_I4, int32 c)
             | Float(_, n) -> g.Emit(OpCodes.Ldc_R4, n)
             | Int(_, n) -> g.Emit(OpCodes.Ldc_I4, n)
             | LookupArg(_, _, i) -> g.Emit(OpCodes.Ldarg, i)
             | LookupVar(_, _, id) -> g.Emit(OpCodes.Ldloc, locals.[id])
             | String(_, s) -> g.Emit(OpCodes.Ldstr, s)
 
-        member this.EmitInitExpr (context : ILContext<_>) (value : EnvValue<_>) : unit =
-            match value with
-            | Var(id, var) ->
-                let local = locals.[id]
-                this.EmitExpr { context with IsTail = false } var.InitExpr
+        member this.EmitInstr (context : ILContext<_>) (instr : Instr<_>) : unit =
+            match instr with
+            | InitLocal(varId, expr) ->
+                let local = locals.[varId]
+                this.EmitExpr { context with IsTail = false } expr
                 g.Emit(OpCodes.Stloc, local)
 
-            | _ ->
-                ()
-
-        member this.EmitBlock (context : ILContext<_>) (block : Block<_>) : unit =
-            for _, value in Map.toSeq block.Env.Values do
-                this.EmitInitExpr context value
-
-            for stmt in block.Body do
-                this.EmitStmt context stmt
-
-        member this.EmitStmt (context : ILContext<_>) (stmt : Stmt<_>) : unit =
-            match stmt with
-            | Block block ->
-                this.EmitBlock context block
-
-            | Expr expr ->
+            | Eval expr ->
                 this.EmitExpr context expr
 
-    let makeILFunction (typeBuilder : TypeBuilder) (map : Map<DeclId, ILFunction<_>>) (name : string) (value : EnvValue<_>) : Map<DeclId, ILFunction<_>> =
-        match value with
-        | Func(id, func) ->
-            let ilFunction = new ILFunction<_>(id, func, typeBuilder, name)
-            Map.add id ilFunction map
+    let makeILFunction
+        (envs        : Map<EnvId, Env<_, _>>)
+        (typeBuilder : TypeBuilder)
+        (map         : Map<DeclId, ILFunction<_>>)
+        (name        : string)
+        (func        : EnvValue<_, _>)
+                     : Map<DeclId, ILFunction<_>>
+        =
+        match func with
+        | Func(funcId, func) ->
+            let ilFunction = new ILFunction<_>(funcId, func, envs, typeBuilder, name)
+            Map.add funcId ilFunction map
 
-        | _ -> map
+        | _ ->
+            map
 
     let rec makeAdjacency (nodes : NodeId list) (adj : Map<NodeId, NodeId>) =
         match nodes with
@@ -142,10 +148,10 @@ module CodeGen =
         | _ ->
             adj
 
-    let emitFunc (ilFuncs : Map<DeclId, ILFunction<_>>) (ilFunc : ILFunction<_>) : unit =
+    let emitFunc (envs : Map<EnvId, Env<Expr, Type>>) (ilFuncs : Map<DeclId, ILFunction<_>>) (ilFunc : ILFunction<_>) : unit =
         let g = ilFunc.Generator
-        let funcBlock = !ilFunc.Func.Block
-        let entryNode, _, graph = makeGraph funcBlock
+        let funcBlock = ilFunc.Func.Body
+        let entryNode, _, graph = makeGraph envs funcBlock
         let labels = Map.map (fun _ _ -> g.DefineLabel()) graph.Nodes
 
         let noTailCall = { ILContext.ILFuncs = ilFuncs
@@ -173,20 +179,20 @@ module CodeGen =
                 | _ -> false
 
         let emitNode (nodeId : NodeId) (node : Node<_>) : unit =
-            let rec emitStmts (stmts : Stmt<_> list) : unit =
-                match stmts with
-                | [stmt] ->
-                    ilFunc.EmitStmt { noTailCall with IsTail = isTail nodeId } stmt
+            let rec emitInstrs (instrs : Instr<_> list) : unit =
+                match instrs with
+                | [instr] ->
+                    ilFunc.EmitInstr { noTailCall with IsTail = isTail nodeId } instr
 
                 | head :: tail ->
-                    ilFunc.EmitStmt noTailCall head
-                    emitStmts tail
+                    ilFunc.EmitInstr noTailCall head
+                    emitInstrs tail
 
                 | [] ->
                     ()
 
             g.MarkLabel(labels.[nodeId])
-            emitStmts node
+            emitInstrs node
 
             match Map.tryFind nodeId graph.OutEdges with
             | None ->
@@ -208,9 +214,6 @@ module CodeGen =
                 g.Emit(OpCodes.Brtrue, labels.[trueId])
                 if not (isAdjacent nodeId falseId) then
                     g.Emit(OpCodes.Br, labels.[falseId])
-
-        for _, value in Map.toSeq funcBlock.Env.Values do
-            ilFunc.EmitInitExpr noTailCall value
 
         emitNode entryNode graph.Nodes.[entryNode]
 

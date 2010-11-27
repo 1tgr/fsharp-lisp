@@ -1,101 +1,108 @@
 ﻿#light
 namespace Tim.Lisp.Core.UnitTests
 open System
-open NUnit.Framework
-open Assertion
-open Eval
+open System.Diagnostics
+open System.IO
+open System.Runtime.InteropServices
+open System.Text
+open Microsoft.Win32
+open Xunit
+open Xunit.Extensions
+open Tim.Lisp.Core
 
-[<TestFixture>]
-type CompilerTests() =
-    [<Test>]
-    member this.shouldReturnNumber() = 
-        eval "6" |> shouldEqual 6
-    
-    [<Test>]
-    member this.shouldReturnString() = 
-        eval "\"hello\"" |> shouldEqual "hello"
+module Utils =
+    type Dummy = Dummy
 
-    [<Test>]
-    member this.shouldDefineAndRetrieveValue() =
-        eval "(define number 6) number" |> shouldEqual 6
+    let assembly = typeof<Dummy>.Assembly
+    let sampleNames = 
+        assembly.GetManifestResourceNames()
+        |> Array.filter (fun s -> s.EndsWith(".scm") && (not (s.StartsWith("stdlib-"))))
 
-    [<Test>]
-    member this.shouldDefineAndAssertValue() =
-        evalVoid @"
-(define number 6)
-(assert-equal 6 number)"
+    let load (name : string) : string =
+        use stream = assembly.GetManifestResourceStream(name)
+        use reader = new StreamReader(stream)
+        reader.ReadToEnd()
 
-    [<Test>]
-    member this.asm_NoArg_NoStack() =
-        eval "(.asm ldc.i4.0 Int32)" |> shouldEqual 0
+    let builtins = Parser.parseString (load "stdlib-xunit.scm")
 
-    [<Test>]
-    member this.asm_Arg_NoStack() =
-        eval "(.asm (ldc.i4 6) Int32)" |> shouldEqual 6
+    let parse (name : string) : Syntax.Expr list =
+        let source = load name
+        builtins @ Parser.parseString source
 
-    [<Test>]
-    member this.asm_NoArg_Stack() =
-        eval "(.asm add Int32 2 4)" |> shouldEqual 6
+module CompilerTests =
+    let data = Array.map (fun a -> [| box a |]) Utils.sampleNames
+        
+    [<Theory; PropertyData("data")>]
+    let parses (name : string) =
+        name
+        |> Utils.parse
+        |> ignore
 
-    [<Test>]
-    member this.asm_Arg_Stack() =
-        eval @"
-(define (char-upcase c) (.asm (call Char.ToUpperInvariant Char) Char c))
-(char-upcase #\x)" |> shouldEqual 'X'
+    [<Theory; PropertyData("data")>]
+    let compiles (name : string) =
+        name
+        |> Utils.parse
+        |> Compiler.compileToDelegate typeof<Action>
+        |> ignore
+          
+    [<Theory; PropertyData("data")>]
+    let verifies (name : string) =
+        let version = 
+            match RuntimeEnvironment.GetSystemVersion() with
+            | "v2.0.50727" -> new Version(3, 5)
+            | s -> new Version(s.Substring(1))
 
-    [<Test>]
-    member this.shouldNestAsm() =
-        eval @"
-(.asm add Int32
-    (.asm (ldc.i4 2) Int32) 
-    (.asm (ldc.i4 4) Int32))" 
-        |> shouldEqual 6
+        let path = sprintf @"SOFTWARE\Microsoft\Microsoft SDKs\Windows\v7.0A\WinSDK-NetFx%d%dTools" version.Major version.Minor
 
-    [<Test>]
-    member this.givenNonTailRecursiveFunction_ShouldNotTailCall() =
-        eval @"
-(define (factorial n)
-  (if (= n 0) 
-    1 
-    (* n (factorial (- n 1)))))
-(factorial 6)"
-        |> shouldEqual 720
+        using (Registry.LocalMachine.OpenSubKey(path)) <|
+        function
+        | null -> ()
+        | key ->
+            match key.GetValue("InstallationFolder") with
+            | null -> ()
+            | folder ->
+                let filename = Path.ChangeExtension(name, ".exe")
 
-    [<Test>]
-    member this.givenTailRecursiveFunction_ShouldTailCall() =
-        eval @"
-(define (factorial n acc)
-  (if (= n 0)
-    acc
-    (factorial (- n 1) (* acc n))))
-(factorial 6 1)"
-        |> shouldEqual 720
+                name
+                |> Utils.parse
+                |> Compiler.compileToFile filename
 
-    [<Test>]
-    member this.givenTailRecursiveFunction_ShouldNotOverflowStack() =
-        eval @"
-(define (countTo total acc)
-  (if (= total acc)
-    acc
-    (countTo total (+ 1 acc))))
-(countTo 10000000 0)" |> shouldEqual 10000000
+                use proc = new Process()
 
-    [<Test>]
-    member this.shouldSelectMethodZeroArgs() =
-        evalVoid "(Console.WriteLine)"
+                proc.StartInfo <-
+                    let peverify = Path.Combine(string folder, "peverify.exe")
+                    let si = new ProcessStartInfo(peverify, sprintf "/nologo %s" filename)
+                    si.CreateNoWindow <- true
+                    si.UseShellExecute <- false
+                    si.RedirectStandardError <- true
+                    si.RedirectStandardOutput <- true
+                    si
 
-    [<Test>]
-    member this.shouldSelectMethodOneArgReferenceType() =
-        evalVoid "(Console.WriteLine \"hello\")"
+                let sb = new StringBuilder()
+                let syncRoot = new obj()
 
-    [<Test>]
-    member this.shouldSelectMethodOneArgBoxed() =
-        evalVoid "(Console.WriteLine 6)"
+                let outputDataReceived (e : DataReceivedEventArgs) =
+                    if not (String.IsNullOrEmpty(e.Data)) then
+                        lock syncRoot <| fun _ ->
+                            if sb.Length > 0 then
+                                ignore <| sb.Append(Environment.NewLine)
 
-    [<Test>]
-    member this.shouldSelectMethodParamsArrayReferenceType() =
-        evalVoid "(Console.WriteLine \"hello {0}\" \"world\")"
+                            ignore <| sb.Append(e.Data)
 
-    [<Test>]
-    member this.shouldSelectMethodParamsArrayBoxed() =
-        evalVoid "(Console.WriteLine \"hello {0}\" 6)"
+                using (proc.OutputDataReceived.Subscribe outputDataReceived) <|
+                fun _ ->
+                    ignore <| proc.Start()
+                    proc.BeginErrorReadLine()
+                    proc.BeginOutputReadLine()
+                    proc.WaitForExit()
+
+                Assert.Equal(sprintf "All Classes and Methods in %s Verified." filename, string sb)
+
+    [<Theory; PropertyData("data")>]
+    let runs (name : string) =
+        let d =
+            name
+            |> Utils.parse
+            |> Compiler.compileToDelegate typeof<Action>
+
+        (d :?> Action).Invoke()

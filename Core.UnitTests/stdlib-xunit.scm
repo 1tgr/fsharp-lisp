@@ -1,0 +1,5 @@
+﻿(.ref "xunit.dll")
+(.using System)
+(.using Xunit)
+(defmacro (assert-equal expected actual)
+          (.asm (call Assert.Equal Int32 Int32) Void expected actual))

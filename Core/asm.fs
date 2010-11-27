@@ -6,6 +6,7 @@ open System.Reflection
 open System.Reflection.Emit
 
 module Asm =
+    open Scoped
     open Syntax
 
     type Asm<'a> =
@@ -16,33 +17,60 @@ module Asm =
             Stack : 'a list
         }
 
-    let tryParseAsm (refs : Assembly list) (using : Set<string>) (expr : Expr) : Asm<Expr> option =
-        let getType (name : string) : Type =
-            let inAssembly (ref : Assembly) : Type option = 
-                using
-                |> Seq.tryPick (fun nspace ->
-                    match ref.GetType(nspace + "." + name, false) with
-                    | null -> None
-                    | t -> Some t)
-
-            match List.tryPick inAssembly refs with
-            | Some t -> t
-            | None -> failwithf "%s is not a .NET type" name
-
+    let tryParseAsm (env : Env<_, _>) (expr : Expr) : Asm<Expr> option =
         let getMethod (name : string) (argTypes : Type list) : MethodInfo =
             let typeName, methodName =
                 match name.LastIndexOf('.') with
                 | -1 -> failwith "expected type.method"
                 | index -> name.Substring(0, index), name.Substring(index + 1)
 
-            let t = getType typeName
-            match t.GetMethod(name = methodName,
-                                bindingAttr = (BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static),
-                                binder = null,
-                                types = Array.ofList argTypes,
-                                modifiers = null) with
-            | null -> failwithf "no method on %s matching %s %A" t.FullName methodName argTypes
-            | mi -> mi
+            let getGenericArgs (assignments : Map<string, Type> option) (expectedType : Type) (actual : ParameterInfo) : Map<string, Type> option =
+                let actualType = actual.ParameterType
+
+                if actualType.IsGenericParameter then
+                    match assignments with
+                    | None -> None
+                    | Some map ->
+                        match Map.tryFind actualType.Name map with
+                        | None -> Some (Map.add actualType.Name expectedType map)
+                        | Some assignedType when expectedType = assignedType -> Some map
+                        | Some _ -> None
+
+                else if actualType = expectedType then
+                    assignments
+
+                else
+                    None
+
+            let filterMethod : (MethodInfo -> MethodInfo option) =
+                let argTypes = Array.ofList argTypes
+                fun mi ->
+                    if mi.Name = methodName then
+                        let parameters = mi.GetParameters()
+                        if argTypes.Length = parameters.Length then
+                            match Array.fold2 getGenericArgs (Some Map.empty) argTypes parameters with
+                            | None ->
+                                None
+
+                            | Some assignments when mi.IsGenericMethodDefinition ->
+                                mi.GetGenericArguments()
+                                |> Array.map (fun t -> assignments.[t.Name])
+                                |> fun a -> mi.MakeGenericMethod(a)
+                                |> Some
+
+                            | _ ->
+                                Some mi
+                        else
+                            None
+                    else
+                        None
+
+            let t = getType env typeName
+            let methods = Array.choose filterMethod <| t.GetMethods()
+            if methods.Length = 0 then
+                failwithf "no method on %s matching %s %A" t.FullName methodName argTypes
+            else
+                methods.[0]
 
         let parseOperand (opCode : OpCode) (operands : Expr list) : obj option =
             match opCode.OperandType with
@@ -52,7 +80,7 @@ module Asm =
                     let mi =
                         types
                         |> List.map (function
-                            | Atom(_, name) -> getType name
+                            | Atom(_, name) -> getType env name
                             | o -> failwithf "expected a type name, not %A" o)
                         |> getMethod name
 
@@ -89,7 +117,7 @@ module Asm =
             | OperandType.InlineType ->
                 match operands with
                 | [Atom(_, name)] ->
-                    let t = getType name
+                    let t = getType env name
                     Some <| box t
 
                 | o -> failwithf "expected a type name, not %A" o
@@ -120,7 +148,7 @@ module Asm =
             {
                 OpCode = opCode
                 Operand = parseOperand opCode operands
-                ResultType = getType resultTypeName
+                ResultType = getType env resultTypeName
                 Stack = stack
             }
 
